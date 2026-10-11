@@ -1,0 +1,16 @@
+import type { DialogueLine } from './DialogueManager';
+
+export const MAIN_DIALOGUE: readonly DialogueLine[] = [
+  {
+    speaker: 'Lucy',
+    text: 'I should probably finish this before midnight.',
+  },
+  {
+    speaker: 'Unknown',
+    text: 'Are you still there?',
+  },
+  {
+    speaker: 'Lucy',
+    text: '...Yeah.',
+  },
+];

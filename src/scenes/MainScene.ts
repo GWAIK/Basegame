@@ -1,4 +1,5 @@
 import { Graphics, Sprite, type Container, type Texture } from 'pixi.js';
+import { AnimatedWebp } from '../animation/AnimatedWebp';
 import { AssetLoader } from '../assets/AssetLoader';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import { Camera } from '../camera/Camera';
@@ -8,6 +9,7 @@ import { DialogueManager } from '../dialogue/DialogueManager';
 import { MAIN_DIALOGUE } from '../dialogue/mainScript';
 import { LEVEL_1, levelAssetPath } from '../levels/level1';
 
+/** Position and scale on the background image, in its pixels. */
 export interface CharacterPlacement {
   x: number;
   y: number;
@@ -15,6 +17,8 @@ export interface CharacterPlacement {
 }
 
 const SHAKE_MARGIN = 48;
+const PLACEHOLDER_SCENE_WIDTH = 1920;
+const PLACEHOLDER_SCENE_HEIGHT = 1080;
 
 /**
  * The first cinematic scene.
@@ -30,7 +34,7 @@ export class MainScene extends Scene {
   private backgroundTexture: Texture | null = null;
   private backgroundSprite: Sprite | null = null;
   private backgroundPlaceholder: Graphics | null = null;
-  private mainCharacter: Container | null = null;
+  private readonly animations: AnimatedWebp[] = [];
 
   constructor(world: Container, ui: Container) {
     super(world);
@@ -43,16 +47,25 @@ export class MainScene extends Scene {
     this.viewHeight = height;
     this.camera.setViewport(width, height);
     await this.loadBackground(LEVEL_1.sceneBackground);
-    this.mainCharacter = await this.addCharacter('main.webp', {
-      x: width / 2,
-      y: height / 2,
-      scale: 1,
-    });
+    for (const character of LEVEL_1.characters) {
+      await this.addCharacter(character.file, character);
+    }
     this.dialogue.resize(width, height);
   }
 
   override update(deltaMS: number): void {
     this.camera.update(deltaMS);
+    for (const animation of this.animations) {
+      animation.update(deltaMS);
+    }
+  }
+
+  override destroy(): void {
+    for (const animation of this.animations) {
+      animation.destroy();
+    }
+    this.animations.length = 0;
+    super.destroy();
   }
 
   override resize(width: number, height: number): void {
@@ -60,7 +73,6 @@ export class MainScene extends Scene {
     this.viewHeight = height;
     this.camera.setViewport(width, height);
     this.layoutBackground();
-    this.mainCharacter?.position.set(width / 2, height / 2);
     this.dialogue.resize(width, height);
   }
 
@@ -108,21 +120,35 @@ export class MainScene extends Scene {
 
   /**
    * Adds a PNG, JPG, or WEBP sprite to the character layer.
-   * Missing files use a simple drawn figure. `scale` is the sprite scale.
+   * An animated WebP loops. A missing file uses a simple drawn figure.
    */
   async addCharacter(filename: string, options: CharacterPlacement): Promise<Container> {
-    const texture = await this.assets.load(
-      `character:${LEVEL_1.id}:${filename}`,
-      levelAssetPath(LEVEL_1.id, 'characters', filename),
-    );
+    const url = levelAssetPath(LEVEL_1.id, 'characters', filename);
     const scale = options.scale ?? 1;
-    const display = texture
-      ? this.createCharacterSprite(texture, scale)
-      : this.createCharacterPlaceholder(scale);
+    const display = await this.createCharacterDisplay(filename, url, scale);
 
     display.position.set(options.x, options.y);
     this.characterLayer.addChild(display);
     return display;
+  }
+
+  private async createCharacterDisplay(
+    filename: string,
+    url: string,
+    scale: number,
+  ): Promise<Container> {
+    if (filename.toLowerCase().endsWith('.webp')) {
+      const animation = await AnimatedWebp.load(url);
+      if (animation) {
+        this.animations.push(animation);
+        return this.createCharacterSprite(animation.texture, scale);
+      }
+    }
+
+    const texture = await this.assets.load(`character:${LEVEL_1.id}:${filename}`, url);
+    return texture
+      ? this.createCharacterSprite(texture, scale)
+      : this.createCharacterPlaceholder(scale);
   }
 
   private createCharacterSprite(texture: Texture, scale: number): Sprite {
@@ -146,6 +172,21 @@ export class MainScene extends Scene {
     const padX = CAMERA_CONFIG.maxOffsetX + SHAKE_MARGIN;
     const padY = CAMERA_CONFIG.maxOffsetY + SHAKE_MARGIN;
     const texture = this.backgroundTexture;
+    const sceneWidth = texture?.width ?? PLACEHOLDER_SCENE_WIDTH;
+    const sceneHeight = texture?.height ?? PLACEHOLDER_SCENE_HEIGHT;
+    const scale = Math.max(
+      (this.viewWidth + padX * 2) / sceneWidth,
+      (this.viewHeight + padY * 2) / sceneHeight,
+    );
+    const left = (this.viewWidth - sceneWidth * scale) / 2;
+    const top = (this.viewHeight - sceneHeight * scale) / 2;
+
+    this.middleLayer.scale.set(scale);
+    this.middleLayer.position.set(left, top);
+    this.characterLayer.scale.set(scale);
+    this.characterLayer.position.set(left, top);
+    this.foregroundLayer.scale.set(scale);
+    this.foregroundLayer.position.set(left, top);
 
     if (texture) {
       const sprite = this.ensureBackgroundSprite(texture);
@@ -154,9 +195,6 @@ export class MainScene extends Scene {
         this.backgroundPlaceholder.visible = false;
       }
 
-      const targetWidth = this.viewWidth + padX * 2;
-      const targetHeight = this.viewHeight + padY * 2;
-      const scale = Math.max(targetWidth / texture.width, targetHeight / texture.height);
       sprite.scale.set(scale);
       sprite.position.set(this.viewWidth / 2, this.viewHeight / 2);
       return;

@@ -38,45 +38,51 @@ Each level is its own folder. Level 2 would be `public/assets/levels/level-2/` w
 
 Supported image types are PNG, JPG/JPEG, and WEBP.
 
-The prototype runs without those files. A missing background becomes a flat dark scene, and a missing character becomes a simple drawn figure.
+The prototype runs without those files. A missing background becomes a flat dark scene.
 
 ## Replace the background
 
 Put the image at:
 
 ```text
-public/assets/levels/level-1/backgrounds/scene.webp
+public/assets/levels/level-1/backgrounds/BG1_test.webp
 ```
 
 The scene loads that filename:
 
 ```ts
-await this.loadBackground('scene.webp');
+await this.loadBackground('BG1_test.webp');
 ```
 
-`loadBackground` is on `MainScene`. The filename comes from `sceneBackground` in `src/levels/level1.ts`. The image is scaled to cover the view, including a margin for camera movement, and keeps its aspect ratio. Replacing `scene.webp` is enough.
+`loadBackground` is on `MainScene`. The filename comes from `sceneBackground` in `src/levels/level1.ts`. The image is scaled to cover the view, including a margin for camera movement, and keeps its aspect ratio. Replace the file with one of the same name, or change `sceneBackground` to the new filename.
 
-## Replace the character
+## Add a character
 
-Put the image at:
+Put the image in:
 
 ```text
-public/assets/levels/level-1/characters/main.webp
+public/assets/levels/level-1/characters/
 ```
 
-The scene places it in the center:
+Then list it in `characters` in `src/levels/level1.ts`:
 
 ```ts
-await this.addCharacter('main.webp', {
-  x: width / 2,
-  y: height / 2,
-  scale: 1,
-});
+characters: [
+  { file: 'ticket.webp', x: 640, y: 300, scale: 0.45 },
+],
 ```
 
-`x` and `y` are the center of the sprite in world space. `scale` is the PixiJS sprite scale (`1` means the image's pixel size). The demo character is recentered when the window resizes. Extra calls to `addCharacter` stay at the coordinates you pass.
+`x` and `y` are the center of the character, in pixels of the background image. Open the background in an image editor and read the coordinates of the spot you want. The character stays on that spot when the window is resized. `scale` is relative to the background: `1` keeps the character's own pixel size.
 
-There is no animation system yet. A later animation system can replace the sprite inside `characterLayer`.
+If the file is missing, a simple drawn figure stands in for it.
+
+### Animated characters
+
+An animated WebP loops on its own, at the frame timing stored in the file. Fully transparent margins around the animation are trimmed when it loads, so a 1920×1080 export with a small character in the middle is fine.
+
+Frames are decoded one at a time with the browser's `ImageDecoder`, so memory stays low however long the animation is. Browsers without `ImageDecoder` show a still frame instead.
+
+Keep animated files reasonably small. Each frame is decoded while the game runs, so a smaller canvas costs less.
 
 ## Create dialogue
 
@@ -150,7 +156,9 @@ camera.shake(10, 300); // 10 pixels, 300 milliseconds
 camera.shake(20, 500);
 ```
 
-The debug panel's Shake button calls `camera.shake(10, 300)`. Shake is random and fades out. It does not change the mouse offset or the headbob. Reset Camera clears shake and recenters the look until the mouse moves again. The idle headbob keeps playing.
+In development, the Debug panel's Camera shake button calls `camera.shake(10, 300)`. Shake is random and fades out. It does not change the mouse offset or the headbob. Reset camera clears shake and recenters the look until the mouse moves again. The idle headbob keeps playing.
+
+The same panel can switch levels, trigger events, and edit `CAMERA_CONFIG` live. Press H to hide or show it. It is not included in a production build.
 
 Large shake values can move past the background margin (`maxOffset` plus 48 pixels). Increase that margin in `MainScene` if a stronger shake shows the edge.
 
@@ -166,6 +174,8 @@ src/
   camera/CameraHeadbob.ts idle sway
   camera/CameraConfig.ts  camera tuning
   scenes/MainScene.ts     composes layers, camera, and dialogue
+  levels/level1.ts        level 1 background and characters
+  animation/AnimatedWebp.ts  looping animated WebP
   dialogue/DialogueManager.ts
   dialogue/DialogueBox.ts
   dialogue/mainScript.ts
@@ -185,7 +195,7 @@ stage
   ui             <- dialogue stays here
 ```
 
-The HTML debug panel sits above the canvas and is not a PixiJS object.
+During `npm run dev`, a [lil-gui](https://lil-gui.georgealways.com/) panel sits above the canvas. It is not a PixiJS object, so the camera does not move it. Add a level to the `levels` list in `src/main.ts`, or an event to the `events` list, and it shows up in the panel. `game.goToLevel()` is where a level change will load the next scene.
 
 Camera code does not reference dialogue. Dialogue does not reference the camera. `MainScene` is the place that wires them together.
 

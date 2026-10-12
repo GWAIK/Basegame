@@ -51,6 +51,13 @@ export class Game {
     this.scene?.resetCamera();
   }
 
+  /** Level changes from the debug panel arrive here. Only level 1 exists for now. */
+  goToLevel(levelId: string): void {
+    if (levelId === 'level-1') {
+      return;
+    }
+  }
+
   private bindInput(canvas: HTMLCanvasElement, scene: MainScene): void {
     window.addEventListener('pointermove', (event) => {
       const rect = canvas.getBoundingClientRect();
@@ -63,6 +70,10 @@ export class Game {
 
     window.addEventListener('keydown', (event) => {
       if (event.repeat) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         return;
       }
       if (event.code === 'Space') {

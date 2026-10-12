@@ -8,41 +8,15 @@ body,
   background: #0b0c10;
 }
 
-#debug-panel {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 148px;
-  padding: 12px;
-  color: #ffffff;
-  background: rgba(8, 9, 12, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-}
-
-#debug-panel p {
-  margin: 0 0 4px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.55;
-}
-
-#debug-panel button {
-  padding: 6px 10px;
-  color: #ffffff;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-#debug-panel button:hover,
-#debug-panel button:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+.lil-gui {
+  --background-color: rgba(8, 9, 12, 0.92);
+  --text-color: #ffffff;
+  --title-background-color: #141820;
+  --title-text-color: #ffffff;
+  --widget-color: #2a2f3a;
+  --hover-color: #343a46;
+  --focus-color: #3d4452;
+  --number-color: #e7e1d6;
+  --font-family: system-ui, sans-serif;
+  z-index: 10;
 }

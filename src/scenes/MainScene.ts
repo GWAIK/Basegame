@@ -7,7 +7,7 @@ import { Scene } from '../core/Scene';
 import { DialogueBox } from '../dialogue/DialogueBox';
 import { DialogueManager } from '../dialogue/DialogueManager';
 import { MAIN_DIALOGUE } from '../dialogue/mainScript';
-import { LEVEL_1, levelAssetPath } from '../levels/level1';
+import { LEVEL_1, findScene, levelAssetPath, type SceneFit } from '../levels/level1';
 
 /** Position and scale on the background image, in its pixels. */
 export interface CharacterPlacement {
@@ -35,6 +35,8 @@ export class MainScene extends Scene {
   private backgroundSprite: Sprite | null = null;
   private backgroundPlaceholder: Graphics | null = null;
   private readonly animations: AnimatedWebp[] = [];
+  private loadGeneration = 0;
+  private currentFit: SceneFit = 'cover';
 
   constructor(world: Container, ui: Container) {
     super(world);
@@ -46,11 +48,33 @@ export class MainScene extends Scene {
     this.viewWidth = width;
     this.viewHeight = height;
     this.camera.setViewport(width, height);
-    await this.loadBackground(LEVEL_1.sceneBackground);
-    for (const character of LEVEL_1.characters) {
-      await this.addCharacter(character.file, character);
-    }
+    await this.showScene(LEVEL_1.defaultSceneId);
     this.dialogue.resize(width, height);
+  }
+
+  /** Loads one of this level's scenes. A newer call cancels an in-flight load. */
+  async showScene(sceneId: string): Promise<void> {
+    const scene = findScene(LEVEL_1, sceneId);
+    const generation = ++this.loadGeneration;
+    this.clearSceneContent();
+    this.currentFit = scene.fit;
+
+    const loaded = await this.loadBackground(scene.background, generation, scene.fit === 'contain');
+    if (!loaded) {
+      return;
+    }
+
+    for (const character of scene.characters) {
+      const added = await this.addCharacter(character.file, character, generation);
+      if (!added) {
+        return;
+      }
+    }
+
+    if (generation !== this.loadGeneration) {
+      return;
+    }
+    this.layoutBackground();
   }
 
   override update(deltaMS: number): void {
@@ -110,45 +134,82 @@ export class MainScene extends Scene {
   }
 
   /** Loads this level's background. A missing file uses a flat placeholder. */
-  async loadBackground(filename: string): Promise<void> {
-    this.backgroundTexture = await this.assets.load(
-      `background:${LEVEL_1.id}:${filename}`,
-      levelAssetPath(LEVEL_1.id, 'backgrounds', filename),
-    );
-    this.layoutBackground();
+  private async loadBackground(
+    filename: string,
+    generation: number,
+    keepFullFrame: boolean,
+  ): Promise<boolean> {
+    const url = levelAssetPath(LEVEL_1.id, 'backgrounds', filename);
+    if (filename.toLowerCase().endsWith('.webp')) {
+      const animation = await AnimatedWebp.load(url, { trim: !keepFullFrame });
+      if (generation !== this.loadGeneration) {
+        animation?.destroy();
+        return false;
+      }
+      if (animation) {
+        this.animations.push(animation);
+        this.backgroundTexture = animation.texture;
+        this.ensureBackgroundSprite(animation.texture);
+        return true;
+      }
+    }
+
+    const texture = await this.assets.load(`background:${LEVEL_1.id}:${filename}`, url);
+    if (generation !== this.loadGeneration) {
+      return false;
+    }
+    this.backgroundTexture = texture;
+    if (texture) {
+      this.ensureBackgroundSprite(texture);
+    }
+    return true;
   }
 
   /**
    * Adds a PNG, JPG, or WEBP sprite to the character layer.
    * An animated WebP loops. A missing file uses a simple drawn figure.
    */
-  async addCharacter(filename: string, options: CharacterPlacement): Promise<Container> {
+  async addCharacter(
+    filename: string,
+    options: CharacterPlacement,
+    generation = this.loadGeneration,
+  ): Promise<Container | null> {
     const url = levelAssetPath(LEVEL_1.id, 'characters', filename);
     const scale = options.scale ?? 1;
-    const display = await this.createCharacterDisplay(filename, url, scale);
+    const created = await this.createCharacterDisplay(filename, url, scale);
+    if (generation !== this.loadGeneration) {
+      created.animation?.destroy();
+      created.display.destroy({ children: true, texture: false, textureSource: false });
+      return null;
+    }
 
-    display.position.set(options.x, options.y);
-    this.characterLayer.addChild(display);
-    return display;
+    if (created.animation) {
+      this.animations.push(created.animation);
+    }
+    created.display.position.set(options.x, options.y);
+    this.characterLayer.addChild(created.display);
+    return created.display;
   }
 
   private async createCharacterDisplay(
     filename: string,
     url: string,
     scale: number,
-  ): Promise<Container> {
+  ): Promise<{ display: Container; animation: AnimatedWebp | null }> {
     if (filename.toLowerCase().endsWith('.webp')) {
       const animation = await AnimatedWebp.load(url);
       if (animation) {
-        this.animations.push(animation);
-        return this.createCharacterSprite(animation.texture, scale);
+        return { display: this.createCharacterSprite(animation.texture, scale), animation };
       }
     }
 
     const texture = await this.assets.load(`character:${LEVEL_1.id}:${filename}`, url);
-    return texture
-      ? this.createCharacterSprite(texture, scale)
-      : this.createCharacterPlaceholder(scale);
+    return {
+      display: texture
+        ? this.createCharacterSprite(texture, scale)
+        : this.createCharacterPlaceholder(scale),
+      animation: null,
+    };
   }
 
   private createCharacterSprite(texture: Texture, scale: number): Sprite {
@@ -168,7 +229,34 @@ export class MainScene extends Scene {
     return figure;
   }
 
+  private clearSceneContent(): void {
+    const destroyView = { children: true, texture: false, textureSource: false } as const;
+    for (const child of this.backgroundLayer.removeChildren()) {
+      child.destroy(destroyView);
+    }
+    for (const child of this.characterLayer.removeChildren()) {
+      child.destroy(destroyView);
+    }
+    for (const animation of this.animations) {
+      animation.destroy();
+    }
+    this.animations.length = 0;
+    this.backgroundSprite = null;
+    this.backgroundPlaceholder = null;
+    this.backgroundTexture = null;
+
+    for (const layer of [this.middleLayer, this.characterLayer, this.foregroundLayer]) {
+      layer.scale.set(1);
+      layer.position.set(0, 0);
+    }
+  }
+
   private layoutBackground(): void {
+    if (this.currentFit === 'contain') {
+      this.layoutContainedBackground();
+      return;
+    }
+
     const padX = CAMERA_CONFIG.maxOffsetX + SHAKE_MARGIN;
     const padY = CAMERA_CONFIG.maxOffsetY + SHAKE_MARGIN;
     const texture = this.backgroundTexture;
@@ -215,6 +303,32 @@ export class MainScene extends Scene {
     placeholder.rect(0, horizon, width, height - horizon).fill(0x1a1e28);
     placeholder.rect(0, horizon, width, 2).fill({ color: 0xffffff, alpha: 0.08 });
     placeholder.position.set(-padX, -padY);
+  }
+
+  /** Uniform scale. The whole frame stays visible, with bars where the screen is a different shape. */
+  private layoutContainedBackground(): void {
+    const texture = this.backgroundTexture;
+    if (!texture) {
+      if (this.backgroundSprite) {
+        this.backgroundSprite.visible = false;
+      }
+      return;
+    }
+
+    const sprite = this.ensureBackgroundSprite(texture);
+    sprite.visible = true;
+    if (this.backgroundPlaceholder) {
+      this.backgroundPlaceholder.visible = false;
+    }
+
+    const padX = CAMERA_CONFIG.maxOffsetX + CAMERA_CONFIG.headbobX;
+    const padY = CAMERA_CONFIG.maxOffsetY + CAMERA_CONFIG.headbobY;
+    const scale = Math.min(
+      (this.viewWidth - padX * 2) / texture.width,
+      (this.viewHeight - padY * 2) / texture.height,
+    );
+    sprite.scale.set(scale);
+    sprite.position.set(this.viewWidth / 2, this.viewHeight / 2);
   }
 
   private ensureBackgroundSprite(texture: Texture): Sprite {

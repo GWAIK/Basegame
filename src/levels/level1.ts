@@ -10,24 +10,56 @@ export interface LevelCharacter {
   scale?: number;
 }
 
-export interface LevelDefinition {
+/**
+ * cover fills the view and crops the overflow.
+ * contain keeps the whole image visible, at a uniform scale.
+ */
+export type SceneFit = 'cover' | 'contain';
+
+export interface LevelScene {
   id: string;
-  sceneBackground: string;
+  label: string;
+  fit: SceneFit;
+  background: string;
   characters: readonly LevelCharacter[];
 }
 
+export interface LevelDefinition {
+  id: string;
+  defaultSceneId: string;
+  scenes: readonly LevelScene[];
+}
+
 /**
- * Level 1 is one scene for now.
- * Its images live in public/assets/levels/level-1/.
- * A later level is another folder plus a definition like this one.
+ * Level 1 scenes.
+ * Images live in public/assets/levels/level-1/.
  */
 export const LEVEL_1: LevelDefinition = {
   id: 'level-1',
-  sceneBackground: 'BG1_test.webp',
-  characters: [
-    { file: 'ticket.webp', x: 640, y: 300, scale: 0.45 },
+  defaultSceneId: 'hana',
+  scenes: [
+    {
+      id: 'test',
+      label: 'Test',
+      fit: 'cover',
+      background: 'BG1_test.webp',
+      characters: [
+        { file: 'ticket.webp', x: 640, y: 300, scale: 0.45 },
+      ],
+    },
+    {
+      id: 'hana',
+      label: 'Hana',
+      fit: 'contain',
+      background: 'hana.webp',
+      characters: [],
+    },
   ],
 };
+
+export function findScene(level: LevelDefinition, sceneId: string): LevelScene {
+  return level.scenes.find((scene) => scene.id === sceneId) ?? level.scenes[0];
+}
 
 export function levelAssetPath(
   levelId: string,

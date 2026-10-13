@@ -12,11 +12,19 @@ export interface DebugAction {
   run: () => void;
 }
 
+export interface DebugScene {
+  id: string;
+  label: string;
+}
+
 export interface DebugPanelOptions {
   levels: readonly DebugLevel[];
   currentLevelId: string;
   /** Called when the level dropdown changes. Scene switching is added here later. */
   onSelectLevel: (levelId: string) => void;
+  scenes: readonly DebugScene[];
+  currentSceneId: string;
+  onSelectScene: (sceneId: string) => void;
   events: readonly DebugAction[];
   camera: CameraConfig;
   onResetCamera: () => void;
@@ -31,6 +39,7 @@ export function createDebugPanel(options: DebugPanelOptions): GUI {
   gui.domElement.style.zIndex = '10';
 
   addLevels(gui, options);
+  addScenes(gui, options);
   addEvents(gui, options.events);
   addCamera(gui, options.camera, options.onResetCamera);
   bindToggle(gui);
@@ -48,6 +57,19 @@ function addLevels(gui: GUI, options: DebugPanelOptions): void {
   const state = { level: options.currentLevelId };
   folder.add(state, 'level', choices).name('Current').onChange((levelId: string) => {
     options.onSelectLevel(levelId);
+  });
+}
+
+function addScenes(gui: GUI, options: DebugPanelOptions): void {
+  const folder = gui.addFolder('Scene');
+  const choices: Record<string, string> = {};
+  for (const scene of options.scenes) {
+    choices[scene.label] = scene.id;
+  }
+
+  const state = { scene: options.currentSceneId };
+  folder.add(state, 'scene', choices).name('Current').onChange((sceneId: string) => {
+    options.onSelectScene(sceneId);
   });
 }
 

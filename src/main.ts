@@ -17,6 +17,9 @@ if (import.meta.env.DEV) {
     levels: [{ id: LEVEL_1.id, label: 'Level 1' }],
     currentLevelId: LEVEL_1.id,
     onSelectLevel: (levelId) => game.goToLevel(levelId),
+    scenes: LEVEL_1.scenes.map((scene) => ({ id: scene.id, label: scene.label })),
+    currentSceneId: LEVEL_1.defaultSceneId,
+    onSelectScene: (sceneId) => game.goToScene(sceneId),
     events: [
       { label: 'Start dialogue', run: () => game.startDialogue() },
       { label: 'Camera shake', run: () => game.shakeCamera() },

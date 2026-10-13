@@ -51,6 +51,10 @@ export class Game {
     this.scene?.resetCamera();
   }
 
+  goToScene(sceneId: string): void {
+    void this.scene?.showScene(sceneId);
+  }
+
   /** Level changes from the debug panel arrive here. Only level 1 exists for now. */
   goToLevel(levelId: string): void {
     if (levelId === 'level-1') {

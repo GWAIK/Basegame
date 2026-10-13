@@ -1,5 +1,10 @@
 import { CanvasSource, Texture } from 'pixi.js';
 
+export interface AnimatedWebpOptions {
+  /** Keeps the full canvas, including transparent margins. */
+  trim?: boolean;
+}
+
 const TRIM_SAMPLES = 12;
 const TRIM_SAMPLE_WIDTH = 256;
 const TRIM_PADDING = 0.03;
@@ -48,7 +53,7 @@ export class AnimatedWebp {
    * Returns null when the browser lacks ImageDecoder, the file is missing,
    * or the WebP has a single frame. Callers can then load it as a still image.
    */
-  static async load(url: string): Promise<AnimatedWebp | null> {
+  static async load(url: string, options?: AnimatedWebpOptions): Promise<AnimatedWebp | null> {
     if (typeof ImageDecoder === 'undefined') {
       return null;
     }
@@ -71,7 +76,9 @@ export class AnimatedWebp {
         return null;
       }
 
-      const area = await findVisibleArea(decoder, track.frameCount);
+      const area = options?.trim === false
+        ? await fullCanvasArea(decoder)
+        : await findVisibleArea(decoder, track.frameCount);
       const animation = new AnimatedWebp(decoder, track.frameCount, area);
       await animation.showFirstFrame();
       return animation;
@@ -146,6 +153,18 @@ export class AnimatedWebp {
       },
     );
   }
+}
+
+async function fullCanvasArea(decoder: ImageDecoder): Promise<Area> {
+  const first = await decoder.decode({ frameIndex: 0 });
+  const area = {
+    x: 0,
+    y: 0,
+    width: first.image.displayWidth,
+    height: first.image.displayHeight,
+  };
+  first.image.close();
+  return area;
 }
 
 /** Union of non-transparent pixels over evenly spaced frames, with a margin for frames in between. */

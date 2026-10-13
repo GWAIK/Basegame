@@ -1,4 +1,4 @@
-# Cinematic Scene
+# Cacophobia
 
 A browser game built with TypeScript, Vite, and PixiJS: a first-person cinematic view with camera look, dialogue, and scenes described in plain JSON files.
 

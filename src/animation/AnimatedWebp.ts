@@ -1,4 +1,5 @@
 import { CanvasSource, Texture } from 'pixi.js';
+import { openChunkDecoder, type DrawnFrame, type FrameArea, type FrameDecoder } from './webpChunks';
 
 export interface AnimatedWebpOptions {
   /** Crops transparent margins. Defaults to true. false keeps the full canvas. */
@@ -10,17 +11,13 @@ const TRIM_SAMPLE_WIDTH = 256;
 const TRIM_PADDING = 0.03;
 const DEFAULT_FRAME_MS = 100;
 
-interface Area {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /**
  * Plays an animated WebP in a loop through one canvas texture.
- * Frames are decoded one ahead with ImageDecoder, so memory does not grow with frame count.
+ * Frames are decoded one ahead, so memory does not grow with the frame count.
  * Transparent margins are trimmed, so only the visible area is uploaded each frame.
+ *
+ * Chrome, Edge, and Firefox decode frames with ImageDecoder. Safari does not have
+ * it, so those browsers reassemble the frames already stored in the file.
  */
 export class AnimatedWebp {
   readonly texture: Texture;
@@ -29,14 +26,13 @@ export class AnimatedWebp {
   private frameIndex = 0;
   private elapsed = 0;
   private frameDuration = DEFAULT_FRAME_MS;
-  private nextFrame: VideoFrame | null = null;
+  private nextFrame: DrawnFrame | null = null;
   private decoding = false;
   private destroyed = false;
 
   private constructor(
-    private readonly decoder: ImageDecoder,
-    private readonly frameCount: number,
-    private readonly area: Area,
+    private readonly decoder: FrameDecoder,
+    private readonly area: FrameArea,
   ) {
     const canvas = document.createElement('canvas');
     canvas.width = area.width;
@@ -50,40 +46,30 @@ export class AnimatedWebp {
   }
 
   /**
-   * Returns null when the browser lacks ImageDecoder, the file is missing,
-   * or the WebP has a single frame. Callers can then load it as a still image.
+   * Returns null when the file is missing or the WebP has a single frame.
+   * Callers can then load it as a still image.
    */
   static async load(url: string, options?: AnimatedWebpOptions): Promise<AnimatedWebp | null> {
-    if (typeof ImageDecoder === 'undefined') {
-      return null;
-    }
-
-    let decoder: ImageDecoder | null = null;
     try {
       const response = await fetch(url);
       const type = response.headers.get('content-type') ?? '';
-      if (!response.ok || !response.body || type.includes('text/html')) {
+      if (!response.ok || type.includes('text/html')) {
         return null;
       }
 
-      decoder = new ImageDecoder({ data: response.body, type: 'image/webp' });
-      await decoder.tracks.ready;
-      await decoder.completed;
-
-      const track = decoder.tracks.selectedTrack;
-      if (!track || !track.animated || track.frameCount < 2) {
-        decoder.close();
+      const bytes = await response.arrayBuffer();
+      const decoder = await openImageDecoder(bytes.slice(0)) ?? openChunkDecoder(bytes);
+      if (!decoder) {
         return null;
       }
 
       const area = options?.trim === false
-        ? await fullCanvasArea(decoder)
-        : await findVisibleArea(decoder, track.frameCount);
-      const animation = new AnimatedWebp(decoder, track.frameCount, area);
+        ? { x: 0, y: 0, width: decoder.width, height: decoder.height }
+        : await decoder.visibleArea();
+      const animation = new AnimatedWebp(decoder, area);
       await animation.showFirstFrame();
       return animation;
     } catch {
-      decoder?.close();
       return null;
     }
   }
@@ -119,15 +105,14 @@ export class AnimatedWebp {
   }
 
   private async showFirstFrame(): Promise<void> {
-    const result = await this.decoder.decode({ frameIndex: 0 });
-    this.draw(result.image);
+    this.draw(await this.decoder.decode(0));
     this.decodeNext();
   }
 
-  private draw(frame: VideoFrame): void {
+  private draw(frame: DrawnFrame): void {
     this.context.clearRect(0, 0, this.area.width, this.area.height);
-    this.context.drawImage(frame, -this.area.x, -this.area.y);
-    this.frameDuration = frame.duration ? frame.duration / 1000 : DEFAULT_FRAME_MS;
+    this.context.drawImage(frame.image, -this.area.x, -this.area.y);
+    this.frameDuration = frame.durationMs;
     frame.close();
     this.texture.source.update();
   }
@@ -138,15 +123,15 @@ export class AnimatedWebp {
     }
 
     this.decoding = true;
-    this.frameIndex = (this.frameIndex + 1) % this.frameCount;
-    this.decoder.decode({ frameIndex: this.frameIndex }).then(
-      (result) => {
+    this.frameIndex = (this.frameIndex + 1) % this.decoder.frameCount;
+    this.decoder.decode(this.frameIndex).then(
+      (frame) => {
         this.decoding = false;
         if (this.destroyed) {
-          result.image.close();
+          frame.close();
           return;
         }
-        this.nextFrame = result.image;
+        this.nextFrame = frame;
       },
       () => {
         this.decoding = false;
@@ -155,26 +140,69 @@ export class AnimatedWebp {
   }
 }
 
-async function fullCanvasArea(decoder: ImageDecoder): Promise<Area> {
-  const first = await decoder.decode({ frameIndex: 0 });
-  const area = {
-    x: 0,
-    y: 0,
-    width: first.image.displayWidth,
-    height: first.image.displayHeight,
-  };
-  first.image.close();
-  return area;
+async function openImageDecoder(bytes: ArrayBuffer): Promise<FrameDecoder | null> {
+  if (typeof ImageDecoder === 'undefined' || !(await ImageDecoder.isTypeSupported('image/webp'))) {
+    return null;
+  }
+
+  let decoder: ImageDecoder | null = null;
+  try {
+    decoder = new ImageDecoder({ data: bytes, type: 'image/webp', preferAnimation: true });
+    await decoder.tracks.ready;
+    await decoder.completed;
+
+    const track = decoder.tracks.selectedTrack;
+    if (!track || !track.animated || track.frameCount < 2) {
+      decoder.close();
+      return null;
+    }
+
+    const first = await decoder.decode({ frameIndex: 0 });
+    const width = first.image.displayWidth;
+    const height = first.image.displayHeight;
+    first.image.close();
+    return new ImageDecoderFrames(decoder, track.frameCount, width, height);
+  } catch {
+    decoder?.close();
+    return null;
+  }
+}
+
+class ImageDecoderFrames implements FrameDecoder {
+  constructor(
+    private readonly decoder: ImageDecoder,
+    readonly frameCount: number,
+    readonly width: number,
+    readonly height: number,
+  ) {}
+
+  async decode(frameIndex: number): Promise<DrawnFrame> {
+    const result = await this.decoder.decode({ frameIndex });
+    const image = result.image;
+    return {
+      image,
+      durationMs: image.duration ? image.duration / 1000 : DEFAULT_FRAME_MS,
+      close: () => image.close(),
+    };
+  }
+
+  visibleArea(): Promise<FrameArea> {
+    return findVisibleArea(this.decoder, this.frameCount, this.width, this.height);
+  }
+
+  close(): void {
+    this.decoder.close();
+  }
 }
 
 /** Union of non-transparent pixels over evenly spaced frames, with a margin for frames in between. */
-async function findVisibleArea(decoder: ImageDecoder, frameCount: number): Promise<Area> {
-  const first = await decoder.decode({ frameIndex: 0 });
-  const width = first.image.displayWidth;
-  const height = first.image.displayHeight;
-  first.image.close();
-
-  const full: Area = { x: 0, y: 0, width, height };
+async function findVisibleArea(
+  decoder: ImageDecoder,
+  frameCount: number,
+  width: number,
+  height: number,
+): Promise<FrameArea> {
+  const full = { x: 0, y: 0, width, height };
   const scale = Math.min(1, TRIM_SAMPLE_WIDTH / width);
   const sampleWidth = Math.max(1, Math.round(width * scale));
   const sampleHeight = Math.max(1, Math.round(height * scale));
@@ -193,7 +221,7 @@ async function findVisibleArea(decoder: ImageDecoder, frameCount: number): Promi
   let maxY = -1;
   const samples = Math.min(frameCount, TRIM_SAMPLES);
 
-  for (let sample = 0; sample < samples; sample++) {
+  for (let sample = 0; sample < samples; sample += 1) {
     const frameIndex = Math.floor((sample * frameCount) / samples);
     const result = await decoder.decode({ frameIndex });
     context.clearRect(0, 0, sampleWidth, sampleHeight);
@@ -201,8 +229,8 @@ async function findVisibleArea(decoder: ImageDecoder, frameCount: number): Promi
     result.image.close();
 
     const pixels = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
-    for (let y = 0; y < sampleHeight; y++) {
-      for (let x = 0; x < sampleWidth; x++) {
+    for (let y = 0; y < sampleHeight; y += 1) {
+      for (let x = 0; x < sampleWidth; x += 1) {
         if (pixels[(y * sampleWidth + x) * 4 + 3] === 0) {
           continue;
         }

@@ -43,7 +43,7 @@ content/
 
 Everything here is found automatically. A new level folder, dialogue file, or image needs no code change.
 
-Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file. Sound files (MP3, OGG, WAV, M4A) are already packaged, ready for an audio feature.
+Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files (MP3, OGG, WAV, M4A) are already packaged, ready for an audio feature.
 
 ### Add a scene
 

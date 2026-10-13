@@ -1,0 +1,20 @@
+{
+  "$schema": "../../schemas/level.schema.json",
+  "name": "Level 1",
+  "startScene": "hana",
+  "scenes": {
+    "hana": {
+      "name": "Hana",
+      "fit": "contain",
+      "background": "backgrounds/hana.webp"
+    },
+    "test": {
+      "name": "Test",
+      "fit": "cover",
+      "background": "backgrounds/BG1_test.webp",
+      "characters": [
+        { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+      ]
+    }
+  }
+}

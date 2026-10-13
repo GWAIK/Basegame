@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Level",
+  "description": "One level. The folder name is the level id. Asset paths are relative to the level folder, or to content/ when they start with /.",
+  "type": "object",
+  "required": ["scenes"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "description": "Label shown in tools. Defaults to the folder name."
+    },
+    "startScene": {
+      "type": "string",
+      "description": "Scene id opened when the level starts. Defaults to the first scene."
+    },
+    "scenes": {
+      "type": "object",
+      "description": "Scenes keyed by id. The id is used by startScene and by other files.",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/scene" }
+    }
+  },
+  "definitions": {
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Label shown in tools. Defaults to the scene id."
+        },
+        "fit": {
+          "enum": ["cover", "contain"],
+          "default": "cover",
+          "description": "cover fills the screen and crops the edges. contain shows the whole image with bars around it."
+        },
+        "background": {
+          "type": "string",
+          "description": "Background image, for example backgrounds/room.webp. An animated WebP loops. Leave it out for a dark placeholder."
+        },
+        "characters": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/character" }
+        },
+        "dialogue": {
+          "type": "string",
+          "description": "Dialogue id from content/dialogues, played when the scene opens."
+        }
+      }
+    },
+    "character": {
+      "type": "object",
+      "required": ["image", "x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "description": "Character image, for example characters/hana.webp. An animated WebP loops."
+        },
+        "x": {
+          "type": "number",
+          "description": "Center of the character, in pixels of the background image."
+        },
+        "y": {
+          "type": "number",
+          "description": "Center of the character, in pixels of the background image."
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1,
+          "description": "Relative to the background. 1 keeps the image's own pixel size."
+        }
+      }
+    }
+  }
+}

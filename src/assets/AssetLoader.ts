@@ -1,45 +1,40 @@
 import { Assets, type Texture } from 'pixi.js';
+import { AnimatedWebp } from '../animation/AnimatedWebp';
+
+export interface LoadedImage {
+  texture: Texture;
+  /** Set for an animated WebP. Its owner must call update() each frame and destroy() when done. */
+  animation: AnimatedWebp | null;
+}
+
+export interface LoadImageOptions {
+  /** Trims transparent margins of animated WebP files. */
+  trim: boolean;
+}
 
 /**
- * Thin wrapper around PixiJS Assets.
- * A missing file returns null so scenes can draw a placeholder.
+ * Loads PNG, JPG, and WEBP images. Animated WebP files are played frame by frame.
+ * Still textures are cached by PixiJS. Each animation gets its own decoder.
  */
 export class AssetLoader {
-  private readonly textures = new Map<string, Texture>();
-
-  async load(alias: string, url: string): Promise<Texture | null> {
-    const cached = this.textures.get(alias);
-    if (cached) {
-      return cached;
-    }
-
-    if (!(await this.canLoad(url))) {
-      return null;
+  async loadImage(url: string, options: LoadImageOptions): Promise<LoadedImage | null> {
+    if (isWebp(url)) {
+      const animation = await AnimatedWebp.load(url, { trim: options.trim });
+      if (animation) {
+        return { texture: animation.texture, animation };
+      }
     }
 
     try {
       const texture = await Assets.load<Texture>(url);
-      this.textures.set(alias, texture);
-      return texture;
-    } catch {
+      return { texture, animation: null };
+    } catch (error) {
+      console.warn(`Could not load ${url}`, error);
       return null;
     }
   }
+}
 
-  get(alias: string): Texture | null {
-    return this.textures.get(alias) ?? null;
-  }
-
-  private async canLoad(url: string): Promise<boolean> {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        return false;
-      }
-      const type = response.headers.get('content-type') ?? '';
-      return !type.includes('text/html');
-    } catch {
-      return false;
-    }
-  }
+function isWebp(url: string): boolean {
+  return new URL(url, window.location.href).pathname.toLowerCase().endsWith('.webp');
 }

@@ -1,7 +1,7 @@
 import { CanvasSource, Texture } from 'pixi.js';
 
 export interface AnimatedWebpOptions {
-  /** Keeps the full canvas, including transparent margins. */
+  /** Crops transparent margins. Defaults to true. false keeps the full canvas. */
   trim?: boolean;
 }
 

@@ -1,0 +1,135 @@
+import { Graphics, Sprite, type Container } from 'pixi.js';
+import type { AnimatedWebp } from '../animation/AnimatedWebp';
+import type { AssetLoader, LoadedImage } from '../assets/AssetLoader';
+import { CAMERA_CONFIG } from '../camera/CameraConfig';
+import type { ContentLibrary } from '../content/ContentLibrary';
+import type { CharacterDef, LevelDef, SceneDef } from '../content/types';
+import { Scene } from '../core/Scene';
+import { fitScene } from './fitScene';
+
+const PLACEHOLDER_WIDTH = 1920;
+const PLACEHOLDER_HEIGHT = 1080;
+
+/**
+ * Draws one scene from a level.json: a background and characters placed in
+ * background pixels. The whole scene is scaled as one, so characters stay on
+ * their spot in the picture at any window size.
+ */
+export class StageScene extends Scene {
+  private readonly animations: AnimatedWebp[] = [];
+  private sceneWidth = PLACEHOLDER_WIDTH;
+  private sceneHeight = PLACEHOLDER_HEIGHT;
+
+  constructor(
+    readonly level: LevelDef,
+    readonly definition: SceneDef,
+    private readonly content: ContentLibrary,
+    private readonly assets: AssetLoader,
+  ) {
+    super();
+    this.root.label = `scene:${level.id}/${definition.id}`;
+  }
+
+  async load(): Promise<void> {
+    const background = this.definition.background;
+    const [backgroundImage, ...characterImages] = await Promise.all([
+      background ? this.loadImage(background, false) : Promise.resolve(null),
+      ...this.definition.characters.map((character) => this.loadImage(character.image, true)),
+    ]);
+    if (this.destroyed) {
+      return;
+    }
+
+    this.addBackground(backgroundImage);
+    this.definition.characters.forEach((character, index) => {
+      this.addCharacter(character, characterImages[index]);
+    });
+    this.layout();
+  }
+
+  /** Lays out every frame, so live camera tuning in the debug panel applies at once. */
+  override update(deltaMS: number): void {
+    for (const animation of this.animations) {
+      animation.update(deltaMS);
+    }
+    this.layout();
+  }
+
+  override destroy(): void {
+    super.destroy();
+    for (const animation of this.animations) {
+      animation.destroy();
+    }
+    this.animations.length = 0;
+  }
+
+  /** A missing file returns null, and the scene draws a placeholder instead. */
+  private async loadImage(path: string, trim: boolean): Promise<LoadedImage | null> {
+    const url = this.content.assetUrl(this.level.id, path);
+    if (!url) {
+      return null;
+    }
+
+    const image = await this.assets.loadImage(url, { trim });
+    if (image?.animation) {
+      if (this.destroyed) {
+        image.animation.destroy();
+        return null;
+      }
+      this.animations.push(image.animation);
+    }
+    return image;
+  }
+
+  private addBackground(image: LoadedImage | null): void {
+    if (!image) {
+      this.backgroundLayer.addChild(createBackgroundPlaceholder());
+      return;
+    }
+
+    this.sceneWidth = image.texture.width;
+    this.sceneHeight = image.texture.height;
+    this.backgroundLayer.addChild(new Sprite(image.texture));
+  }
+
+  private addCharacter(character: CharacterDef, image: LoadedImage | null): void {
+    const display: Container = image ? new Sprite(image.texture) : createCharacterPlaceholder();
+    if (display instanceof Sprite) {
+      display.anchor.set(0.5);
+    }
+    display.scale.set(character.scale);
+    display.position.set(character.x, character.y);
+    this.characterLayer.addChild(display);
+  }
+
+  private layout(): void {
+    const transform = fitScene(
+      this.definition.fit,
+      this.viewWidth,
+      this.viewHeight,
+      this.sceneWidth,
+      this.sceneHeight,
+      CAMERA_CONFIG,
+    );
+    this.root.scale.set(transform.scale);
+    this.root.position.set(transform.x, transform.y);
+  }
+}
+
+function createBackgroundPlaceholder(): Graphics {
+  const horizon = Math.round(PLACEHOLDER_HEIGHT * 0.58);
+  const placeholder = new Graphics();
+  placeholder.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(0x10131a);
+  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT - horizon).fill(0x1a1e28);
+  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, 2).fill({ color: 0xffffff, alpha: 0.08 });
+  return placeholder;
+}
+
+function createCharacterPlaceholder(): Graphics {
+  const figure = new Graphics();
+  figure.ellipse(0, 78, 36, 8).fill({ color: 0x000000, alpha: 0.35 });
+  figure.roundRect(-26, 8, 52, 68, 16).fill(0xd9d3c7);
+  figure.circle(0, -18, 22).fill(0xe7e1d6);
+  figure.pivot.set(0, 18);
+  return figure;
+}

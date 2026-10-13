@@ -1,106 +1,95 @@
-import GUI from 'lil-gui';
-import type { CameraConfig } from '../camera/CameraConfig';
-
-export interface DebugLevel {
-  id: string;
-  label: string;
-}
-
-/** Something the debug panel can trigger. Later: scene events, flags, timers. */
-export interface DebugAction {
-  label: string;
-  run: () => void;
-}
-
-export interface DebugScene {
-  id: string;
-  label: string;
-}
-
-export interface DebugPanelOptions {
-  levels: readonly DebugLevel[];
-  currentLevelId: string;
-  /** Called when the level dropdown changes. Scene switching is added here later. */
-  onSelectLevel: (levelId: string) => void;
-  scenes: readonly DebugScene[];
-  currentSceneId: string;
-  onSelectScene: (sceneId: string) => void;
-  events: readonly DebugAction[];
-  camera: CameraConfig;
-  onResetCamera: () => void;
-}
+import GUI, { type Controller } from 'lil-gui';
+import { CAMERA_CONFIG } from '../camera/CameraConfig';
+import type { Game } from '../core/Game';
 
 /**
  * Floating debug panel. Only created in development.
- * Press H to hide or show it. The panel is not part of the PixiJS scene.
+ * Levels, scenes, and dialogues are read from content/, so new content shows up here by itself.
+ * Press H to hide or show it.
  */
-export function createDebugPanel(options: DebugPanelOptions): GUI {
+export function createDebugPanel(game: Game): GUI {
   const gui = new GUI({ title: 'Debug' });
   gui.domElement.style.zIndex = '10';
 
-  addLevels(gui, options);
-  addScenes(gui, options);
-  addEvents(gui, options.events);
-  addCamera(gui, options.camera, options.onResetCamera);
+  addNavigation(gui, game);
+  addDialogues(gui, game);
+  addEvents(gui, game);
+  addCamera(gui, game);
   bindToggle(gui);
 
   return gui;
 }
 
-function addLevels(gui: GUI, options: DebugPanelOptions): void {
-  const folder = gui.addFolder('Level');
-  const choices: Record<string, string> = {};
-  for (const level of options.levels) {
-    choices[level.label] = level.id;
+function addNavigation(gui: GUI, game: Game): void {
+  const folder = gui.addFolder('Location');
+  const levelChoices: Record<string, string> = {};
+  for (const level of game.content.levels) {
+    levelChoices[level.name] = level.id;
   }
 
-  const state = { level: options.currentLevelId };
-  folder.add(state, 'level', choices).name('Current').onChange((levelId: string) => {
-    options.onSelectLevel(levelId);
+  const state = {
+    level: game.location?.levelId ?? game.content.firstLevel?.id ?? '',
+    scene: game.location?.sceneId ?? '',
+  };
+
+  const levelController = folder.add(state, 'level', levelChoices).name('Level');
+  levelController.onChange((levelId: string) => {
+    void game.goTo(levelId);
+    blurFocus();
   });
-}
 
-function addScenes(gui: GUI, options: DebugPanelOptions): void {
-  const folder = gui.addFolder('Scene');
-  const choices: Record<string, string> = {};
-  for (const scene of options.scenes) {
-    choices[scene.label] = scene.id;
-  }
-
-  const state = { scene: options.currentSceneId };
-  folder.add(state, 'scene', choices).name('Current').onChange((sceneId: string) => {
-    options.onSelectScene(sceneId);
-  });
-}
-
-function addEvents(gui: GUI, events: readonly DebugAction[]): void {
-  const folder = gui.addFolder('Events');
-  for (const event of events) {
-    const action = {
-      run: () => {
-        event.run();
-        blurFocus();
-      },
-    };
-    folder.add(action, 'run').name(event.label);
-  }
-}
-
-function addCamera(gui: GUI, camera: CameraConfig, onResetCamera: () => void): void {
-  const folder = gui.addFolder('Camera');
-  folder.add(camera, 'maxOffsetX', 0, 120, 1).name('Offset X');
-  folder.add(camera, 'maxOffsetY', 0, 80, 1).name('Offset Y');
-  folder.add(camera, 'edgeZone', 0.05, 0.5, 0.01).name('Edge zone');
-  folder.add(camera, 'smoothing', 0.01, 0.3, 0.01).name('Smoothing');
-  folder.add(camera, 'headbobX', 0, 12, 0.1).name('Headbob X');
-  folder.add(camera, 'headbobY', 0, 12, 0.1).name('Headbob Y');
-  folder.add(camera, 'headbobPeriod', 800, 8000, 50).name('Headbob period');
-  folder.add({
-    run: () => {
-      onResetCamera();
+  let sceneController: Controller | null = null;
+  const rebuildScenes = () => {
+    sceneController?.destroy();
+    const level = game.content.level(state.level);
+    const sceneChoices: Record<string, string> = {};
+    for (const scene of level?.scenes ?? []) {
+      sceneChoices[scene.name] = scene.id;
+    }
+    sceneController = folder.add(state, 'scene', sceneChoices).name('Scene');
+    sceneController.onChange((sceneId: string) => {
+      void game.goTo(state.level, sceneId);
       blurFocus();
-    },
-  }, 'run').name('Reset camera');
+    });
+  };
+  rebuildScenes();
+
+  game.events.on('scene:enter', ({ levelId, sceneId }) => {
+    const levelChanged = state.level !== levelId;
+    state.level = levelId;
+    state.scene = sceneId;
+    levelController.updateDisplay();
+    if (levelChanged) {
+      rebuildScenes();
+    } else {
+      sceneController?.updateDisplay();
+    }
+  });
+}
+
+function addDialogues(gui: GUI, game: Game): void {
+  const folder = gui.addFolder('Dialogues');
+  for (const id of game.content.dialogues.keys()) {
+    folder.add({ play: () => run(() => game.playDialogue(id)) }, 'play').name(id);
+  }
+}
+
+/** One-off triggers. Add a line here to test a new feature by hand. */
+function addEvents(gui: GUI, game: Game): void {
+  const folder = gui.addFolder('Events');
+  folder.add({ run: () => run(() => game.shakeCamera()) }, 'run').name('Camera shake');
+}
+
+function addCamera(gui: GUI, game: Game): void {
+  const folder = gui.addFolder('Camera');
+  folder.add(CAMERA_CONFIG, 'maxOffsetX', 0, 120, 1).name('Offset X');
+  folder.add(CAMERA_CONFIG, 'maxOffsetY', 0, 80, 1).name('Offset Y');
+  folder.add(CAMERA_CONFIG, 'edgeZone', 0.05, 0.5, 0.01).name('Edge zone');
+  folder.add(CAMERA_CONFIG, 'smoothing', 0.01, 0.3, 0.01).name('Smoothing');
+  folder.add(CAMERA_CONFIG, 'headbobX', 0, 12, 0.1).name('Headbob X');
+  folder.add(CAMERA_CONFIG, 'headbobY', 0, 12, 0.1).name('Headbob Y');
+  folder.add(CAMERA_CONFIG, 'headbobPeriod', 800, 8000, 50).name('Headbob period');
+  folder.add({ run: () => run(() => game.resetCamera()) }, 'run').name('Reset camera');
 }
 
 function bindToggle(gui: GUI): void {
@@ -109,7 +98,7 @@ function bindToggle(gui: GUI): void {
     if (event.repeat || event.code !== 'KeyH') {
       return;
     }
-    if (isTypingTarget(event.target)) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
     visible = !visible;
@@ -121,12 +110,14 @@ function bindToggle(gui: GUI): void {
   });
 }
 
+function run(action: () => void): void {
+  action();
+  blurFocus();
+}
+
+/** Keeps Space and Enter for the game after a panel button is clicked. */
 function blurFocus(): void {
   if (document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
   }
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 }

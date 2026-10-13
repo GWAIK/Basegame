@@ -1,14 +1,11 @@
+import type { DialogueLine } from '../content/types';
 import type { DialogueBox } from './DialogueBox';
 
-export interface DialogueLine {
-  speaker: string;
-  text: string;
-}
-
 export class DialogueManager {
-  private lines: DialogueLine[] = [];
+  private lines: readonly DialogueLine[] = [];
   private index = 0;
   private active = false;
+  private onClose: (() => void) | null = null;
 
   constructor(private readonly box: DialogueBox) {
     this.box.hide();
@@ -18,15 +15,18 @@ export class DialogueManager {
     return this.active;
   }
 
-  start(lines: readonly DialogueLine[]): void {
+  /** onClose runs once, when the last line is passed or the dialogue is closed. */
+  start(lines: readonly DialogueLine[], onClose?: () => void): void {
+    this.close();
     if (lines.length === 0) {
-      this.close();
+      onClose?.();
       return;
     }
 
-    this.lines = lines.slice();
+    this.lines = lines;
     this.index = 0;
     this.active = true;
+    this.onClose = onClose ?? null;
     this.showCurrent();
   }
 
@@ -45,10 +45,13 @@ export class DialogueManager {
   }
 
   close(): void {
+    const onClose = this.onClose;
     this.active = false;
     this.lines = [];
     this.index = 0;
+    this.onClose = null;
     this.box.hide();
+    onClose?.();
   }
 
   resize(width: number, height: number): void {

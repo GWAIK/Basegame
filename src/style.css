@@ -20,3 +20,35 @@ body,
   --font-family: system-ui, sans-serif;
   z-index: 10;
 }
+
+.content-problems {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 20;
+  max-width: min(720px, calc(100vw - 24px));
+  max-height: 40vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid #ff6b6b;
+  border-radius: 6px;
+  background: rgba(40, 8, 10, 0.94);
+  color: #ffe3e3;
+  font: 13px/1.45 system-ui, sans-serif;
+}
+
+.content-problems button {
+  float: right;
+  margin-left: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.content-problems ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}

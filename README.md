@@ -1,204 +1,200 @@
 # Cinematic Scene
 
-A small browser scene built with TypeScript, Vite, and PixiJS. It is a foundation for a 2D cinematic view: one scene, a camera, dialogue, and a debug panel. There is no game engine, backend, or save system.
+A browser game built with TypeScript, Vite, and PixiJS: a first-person cinematic view with camera look, dialogue, and scenes described in plain JSON files.
 
-## Install
+The project is split in two:
+
+- `content/` holds images, sound, levels, and dialogue. Artists and writers work here and never need to open `src/`.
+- `src/` holds the engine. Programmers work here.
+
+## Install and run
 
 ```bash
 npm install
-```
-
-## Run
-
-```bash
 npm run dev
 ```
 
-Open the URL Vite prints (usually `http://localhost:5173`).
+Open the URL Vite prints (usually `http://localhost:5173`). Saving any file in `content/` reloads the page.
 
 ## Build
 
 ```bash
-npm run build
-npm run preview
+npm run build     # type-checks, then writes the game to dist/
+npm run preview   # serves dist/ locally
 ```
 
-## Where to put images
+`dist/` uses relative URLs, so it runs from any folder: itch.io, GitHub Pages, or an unzipped folder. For itch.io, zip the contents of `dist/` (with `index.html` at the root of the zip) and upload it as an HTML project.
 
-Static files live in `public/assets/` and are served from `/assets/...`.
+## Content
 
 ```text
-public/assets/levels/level-1/backgrounds/   scene photo for level 1
-public/assets/levels/level-1/characters/    character stills for level 1
-public/assets/levels/level-1/foreground/    foreground art for level 1
-public/assets/ui/                           shared UI art
+content/
+  levels/
+    level-1/
+      level.json          scenes of this level
+      backgrounds/        scene images
+      characters/         character images
+      foreground/         foreground art
+  dialogues/
+    intro.json            one file per dialogue
+  ui/                     shared interface art
+  schemas/                editor autocomplete for the JSON files
 ```
 
-Each level is its own folder. Level 2 would be `public/assets/levels/level-2/` with the same `backgrounds`, `characters`, and `foreground` folders. The definition for the current level is `src/levels/level1.ts`.
+Everything here is found automatically. A new level folder, dialogue file, or image needs no code change.
 
-Supported image types are PNG, JPG/JPEG, and WEBP.
+Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file. Sound files (MP3, OGG, WAV, M4A) are already packaged, ready for an audio feature.
 
-The prototype runs without those files. A missing background becomes a flat dark scene.
+### Add a scene
 
-## Replace the background
+Put the image in the level's `backgrounds/` folder, then add an entry to `scenes` in `level.json`:
 
-Put the image at:
-
-```text
-public/assets/levels/level-1/backgrounds/BG1_test.webp
-```
-
-The scene loads that filename:
-
-```ts
-await this.loadBackground('BG1_test.webp');
-```
-
-`loadBackground` is on `MainScene`. The filename comes from `sceneBackground` in `src/levels/level1.ts`. The image is scaled to cover the view, including a margin for camera movement, and keeps its aspect ratio. Replace the file with one of the same name, or change `sceneBackground` to the new filename.
-
-## Add a character
-
-Put the image in:
-
-```text
-public/assets/levels/level-1/characters/
-```
-
-Then list it in `characters` in `src/levels/level1.ts`:
-
-```ts
-characters: [
-  { file: 'ticket.webp', x: 640, y: 300, scale: 0.45 },
-],
-```
-
-`x` and `y` are the center of the character, in pixels of the background image. Open the background in an image editor and read the coordinates of the spot you want. The character stays on that spot when the window is resized. `scale` is relative to the background: `1` keeps the character's own pixel size.
-
-If the file is missing, a simple drawn figure stands in for it.
-
-### Animated characters
-
-An animated WebP loops on its own, at the frame timing stored in the file. Fully transparent margins around the animation are trimmed when it loads, so a 1920×1080 export with a small character in the middle is fine.
-
-Frames are decoded one at a time with the browser's `ImageDecoder`, so memory stays low however long the animation is. Browsers without `ImageDecoder` show a still frame instead.
-
-Keep animated files reasonably small. Each frame is decoded while the game runs, so a smaller canvas costs less.
-
-## Create dialogue
-
-Dialogue is a list of lines. The demo script is `src/dialogue/mainScript.ts`:
-
-```ts
-const dialogue = [
-  {
-    speaker: 'Lucy',
-    text: 'I should probably finish this before midnight.',
-  },
-  {
-    speaker: 'Unknown',
-    text: 'Are you still there?',
-  },
-  {
-    speaker: 'Lucy',
-    text: '...Yeah.',
-  },
-];
-```
-
-Start it from the scene:
-
-```ts
-this.dialogue.start(dialogue);
-```
-
-The box is drawn in the UI layer, so it does not move with the camera. Click, Space, or Enter advances. Escape closes it. When the list ends, the box hides.
-
-Lines are sequential only. Branching and choices are not part of this prototype.
-
-## Change camera movement
-
-All camera tuning is in `src/camera/CameraConfig.ts`:
-
-```ts
-export const CAMERA_CONFIG = {
-  maxOffsetX: 40,
-  maxOffsetY: 25,
-  edgeZone: 0.2,
-  smoothing: 0.05,
-  shakeDecay: 1,
-  headbobX: 1.5,
-  headbobY: 3,
-  headbobPeriod: 3600,
-};
+```json
+{
+  "$schema": "../../schemas/level.schema.json",
+  "name": "Level 1",
+  "startScene": "hana",
+  "scenes": {
+    "hana": {
+      "name": "Hana",
+      "fit": "contain",
+      "background": "backgrounds/hana.webp"
+    },
+    "test": {
+      "name": "Test",
+      "fit": "cover",
+      "background": "backgrounds/BG1_test.webp",
+      "characters": [
+        { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+      ],
+      "dialogue": "intro"
+    }
+  }
+}
 ```
 
 | Field | Effect |
 | --- | --- |
-| `maxOffsetX` / `maxOffsetY` | How far the mouse can shift the view, in pixels |
-| `edgeZone` | Outer fraction of each screen edge that has an effect. `0.2` leaves the middle 60% still |
-| `smoothing` | How quickly the camera catches its target. `0.05` is slow. Higher is snappier |
-| `shakeDecay` | How shake fades. `1` is linear |
-| `headbobX` / `headbobY` | Idle sway in pixels. Set either to `0` to remove that axis |
-| `headbobPeriod` | Milliseconds for one vertical bob. The horizontal sway takes twice as long |
+| `startScene` | Scene opened when the level starts. Defaults to the first one |
+| `name` | Label in the debug panel |
+| `fit` | `cover` fills the screen and crops the edges. `contain` shows the whole image, with bars around it |
+| `background` | Image path. Leave it out for a dark placeholder |
+| `characters` | Images placed on the background |
+| `dialogue` | Dialogue played when the scene opens |
 
-The mouse sets a target. Each frame moves the current offset toward that target. The camera position is:
+Paths are relative to the level folder. A path starting with `/` starts from `content/`, for shared art: `/ui/frame.png`.
 
-```text
-base position + mouse offset + shake offset + headbob
+The `$schema` line gives autocomplete and inline errors in Cursor and VS Code.
+
+### Place a character
+
+`x` and `y` are the center of the character, in pixels of the background image: open the background in an image editor and read the coordinates of the spot. The character stays on that spot at any window size. `scale` is relative to the background, `1` keeps the image's own size.
+
+Transparent margins around an animated character are trimmed when it loads, so a 1920×1080 export with a small character in the middle is fine. Backgrounds are never trimmed, so their pixel coordinates stay exact.
+
+### Write dialogue
+
+One file per dialogue in `content/dialogues/`. The file name is the id, so `intro.json` is `"intro"`:
+
+```json
+{
+  "$schema": "../schemas/dialogue.schema.json",
+  "lines": [
+    { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
+    { "speaker": "Unknown", "text": "Are you still there?" }
+  ]
+}
 ```
 
-Only the `world` container moves. Dialogue and the debug panel stay on screen.
+Leave `speaker` out for narration. Click, Space, or Enter advances. Escape closes.
 
-## Trigger camera shake
+### When something is wrong
 
-```ts
-camera.shake(10, 300); // 10 pixels, 300 milliseconds
-camera.shake(20, 500);
-```
+Mistakes in content do not crash the game. In development, a red box lists each one with its file and field, for example a typo in a field name, a missing image, or a dialogue id that does not exist. A missing image is replaced by a placeholder.
 
-In development, the Debug panel's Camera shake button calls `camera.shake(10, 300)`. Shake is random and fades out. It does not change the mouse offset or the headbob. Reset camera clears shake and recenters the look until the mouse moves again. The idle headbob keeps playing.
+File names are case-sensitive on itch.io. `Hana.webp` and `hana.webp` are different files there, even if your computer treats them as the same. The red box warns about this.
 
-The same panel can switch levels, trigger events, and edit `CAMERA_CONFIG` live. Press H to hide or show it. It is not included in a production build.
+## Debug panel
 
-Large shake values can move past the background margin (`maxOffset` plus 48 pixels). Increase that margin in `MainScene` if a stronger shake shows the edge.
+In development, a panel on the right lists every level, scene, and dialogue found in `content/`, plus camera tuning and test events. Press H to hide or show it. It is not included in a build.
 
-## Project architecture
+## Engine
 
 ```text
 src/
-  main.ts                 boots the game and binds the debug panel
-  core/Game.ts            PixiJS application, resize, and update loop
-  core/Scene.ts           world layers shared by scenes
-  camera/Camera.ts        mouse look, shake, and headbob
-  camera/CameraShake.ts   timed random offset
-  camera/CameraHeadbob.ts idle sway
-  camera/CameraConfig.ts  camera tuning
-  scenes/MainScene.ts     composes layers, camera, and dialogue
-  levels/level1.ts        level 1 background and characters
-  animation/AnimatedWebp.ts  looping animated WebP
-  dialogue/DialogueManager.ts
-  dialogue/DialogueBox.ts
-  dialogue/mainScript.ts
-  assets/AssetLoader.ts
-  debug/DebugPanel.ts
+  main.ts                      loads content, starts the game, opens dev tools
+  core/Game.ts                 PixiJS app, loop, input, scene changes, dialogue
+  core/Scene.ts                base class for scenes
+  core/EventBus.ts             typed events
+  core/GameEvents.ts           the list of game events
+  content/ContentLibrary.ts    finds and checks everything in content/
+  content/parse.ts             reads level and dialogue JSON
+  content/types.ts             level, scene, and dialogue types
+  scenes/StageScene.ts         draws a scene from level.json
+  scenes/fitScene.ts           cover and contain scaling
+  assets/AssetLoader.ts        images and animated WebP
+  animation/AnimatedWebp.ts    frame-by-frame WebP playback
+  camera/                      mouse look, shake, headbob, tuning
+  dialogue/                    dialogue box and sequencing
+  debug/                       debug panel and content problem list
 ```
-
-`Game` creates two stage containers:
 
 ```text
 stage
-  world          <- camera moves this
-    background
-    middle
-    character
-    foreground
-  ui             <- dialogue stays here
+  world          <- the camera moves this
+    scene root   <- scaled to fit the screen
+      background
+      middle
+      character
+      foreground
+  ui             <- dialogue, fixed on screen
 ```
 
-During `npm run dev`, a [lil-gui](https://lil-gui.georgealways.com/) panel sits above the canvas. It is not a PixiJS object, so the camera does not move it. Add a level to the `levels` list in `src/main.ts`, or an event to the `events` list, and it shows up in the panel. `game.goToLevel()` is where a level change will load the next scene.
+### Moving around
 
-Camera code does not reference dialogue. Dialogue does not reference the camera. `MainScene` is the place that wires them together.
+```ts
+game.goTo('level-1');          // the level's start scene
+game.goTo('level-1', 'test');  // a given scene
+game.playDialogue('intro');
+game.shakeCamera(20, 500);     // pixels, milliseconds
+```
 
-The empty `middle` and `foreground` layers are there so parallax can be added later by moving those containers at different speeds. New scenes can extend `Scene` and be swapped from `Game` without rewriting the application loop.
+The current scene stays on screen until the next one has loaded, so there is never a blank frame.
 
-Not included, on purpose: combat, inventory, quests, saves, audio, animation, mobile controls, and progression. Those can be new modules beside the existing ones.
+### Adding a feature
+
+Features listen to the game instead of being wired into it:
+
+```ts
+game.events.on('scene:enter', ({ levelId, sceneId }) => {
+  // start ambience for this scene
+});
+game.events.on('dialogue:end', ({ dialogueId }) => {
+  // unlock the next step
+});
+game.events.on('update', ({ deltaMS }) => {
+  // per-frame work
+});
+```
+
+Available events are listed in `src/core/GameEvents.ts`. To add one, declare it there, then call `game.events.emit()` where it happens.
+
+When a feature needs new data in `level.json`, for example clickable areas:
+
+1. Add the field to the types in `src/content/types.ts`.
+2. Read and check it in `src/content/parse.ts`, and add its name to the list of allowed keys.
+3. Describe it in `content/schemas/level.schema.json` for autocomplete.
+4. Use it in `src/scenes/StageScene.ts`, or in a new scene class extending `Scene`.
+
+## Camera tuning
+
+All camera settings are in `src/camera/CameraConfig.ts`, and can be changed live from the debug panel.
+
+| Field | Effect |
+| --- | --- |
+| `maxOffsetX` / `maxOffsetY` | How far the mouse can shift the view, in pixels |
+| `edgeZone` | Outer fraction of each screen edge that moves the camera. `0.2` leaves the middle 60% still |
+| `smoothing` | How quickly the camera catches up. Higher is snappier |
+| `shakeDecay` | How shake fades. `1` is linear |
+| `headbobX` / `headbobY` | Idle sway in pixels. `0` removes that axis |
+| `headbobPeriod` | Milliseconds for one vertical bob. The horizontal sway takes twice as long |

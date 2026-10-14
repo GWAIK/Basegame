@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Level",
-  "description": "One level. The folder name is the level id. Asset paths are relative to the level folder, or to content/ when they start with /.",
+  "description": "One level. The folder name is the level id. A path like backgrounds/room.webp is inside this level. A path starting with / is from content/, for shared files: /shared/backgrounds/room.webp.",
   "type": "object",
   "required": ["scenes"],
   "additionalProperties": false,
@@ -42,7 +42,7 @@
         },
         "background": {
           "type": "string",
-          "description": "Background image, for example backgrounds/room.webp. An animated WebP loops. Leave it out for a dark placeholder."
+          "description": "Background image. Shared art uses /shared/backgrounds/room.webp. An animated WebP loops. Leave it out for a dark placeholder."
         },
         "characters": {
           "type": "array",
@@ -75,7 +75,7 @@
       "properties": {
         "file": {
           "type": "string",
-          "description": "Sound file in the level folder, for example audio/room.ogg. It loops."
+          "description": "Looping sound. Shared audio uses /shared/audio/room.ogg."
         },
         "volume": {
           "type": "number",
@@ -120,7 +120,7 @@
           "properties": {
             "sound": {
               "type": "string",
-              "description": "Sound file in the level folder, for example audio/click.wav."
+              "description": "Sound file. Shared audio uses /shared/audio/click.wav."
             },
             "volume": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
           }
@@ -177,7 +177,7 @@
       "properties": {
         "image": {
           "type": "string",
-          "description": "Character image, for example characters/hana.webp. An animated WebP loops."
+          "description": "Character image. Shared art uses /shared/characters/hana.webp. An animated WebP loops."
         },
         "x": {
           "type": "number",

@@ -92,7 +92,7 @@ export class ContentLibrary {
 
   /**
    * URL of an asset referenced from a level.
-   * "backgrounds/room.webp" is inside the level folder. "/ui/frame.png" is from content/.
+   * "backgrounds/room.webp" is inside the level folder. "/shared/audio/room.wav" is from content/.
    */
   assetUrl(levelId: string, path: string): string | null {
     return this.assets.get(assetKey(levelId, path)) ?? null;

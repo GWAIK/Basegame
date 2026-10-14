@@ -29,26 +29,26 @@ npm run preview   # serves dist/ locally
 
 ```text
 content/
+  shared/                 art and sound used by more than one level
+    backgrounds/
+    characters/
+    audio/
   levels/
     level-1/
       level.json          scenes, ambience, and interactions
-      backgrounds/        scene images
-      characters/         character images
-      foreground/         foreground art
-      audio/              ambience and sounds for this level
   dialogues/
     intro.json            one file per dialogue
-  ui/                     shared interface art
+  ui/                     interface art
   schemas/                editor autocomplete for the JSON files
 ```
 
-Everything here is found automatically. A new level is a copy of a level folder with a new name. No code change, and nothing to register.
+Everything here is found automatically. A new level is a folder with a `level.json`. No code change, and nothing to register. Pictures and sounds go in `shared/` when another level uses them too.
 
 Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files can be MP3, OGG, WAV, or M4A.
 
 ### Add a scene
 
-Put the image in the level's `backgrounds/` folder, then add an entry to `scenes` in `level.json`:
+Put the image in `content/shared/backgrounds/`, then add an entry to `scenes` in `level.json`:
 
 ```json
 {
@@ -59,15 +59,15 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
     "hana": {
       "name": "Hana",
       "fit": "contain",
-      "background": "backgrounds/hana.webp"
+      "background": "/shared/backgrounds/hana.webp"
     },
     "test": {
       "name": "Test",
       "fit": "cover",
-      "background": "backgrounds/BG1_test.webp",
-      "ambience": { "file": "audio/room.wav", "volume": 0.65 },
+      "background": "/shared/backgrounds/BG1_test.webp",
+      "ambience": { "file": "/shared/audio/room.wav", "volume": 0.65 },
       "characters": [
-        { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+        { "image": "/shared/characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
       ],
       "triggers": [
         {
@@ -77,7 +77,7 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
           "width": 864,
           "height": 486,
           "actions": [
-            { "sound": "audio/click.wav" },
+            { "sound": "/shared/audio/click.wav" },
             { "dialogue": "intro" },
             { "shake": { "intensity": 8, "duration": 280 } },
             { "go": "hana" }
@@ -101,13 +101,13 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
 | `onEnter` | Actions run when the scene opens |
 | `triggers` | Invisible boxes. A click runs their actions |
 
-Paths are relative to the level folder. A path starting with `/` starts from `content/`, for shared art: `/ui/frame.png`.
+A path starting with `/` starts from `content/`. Shared files use that form: `/shared/backgrounds/hallway.webp`. Several levels can point at the same file. A path without `/` stays inside the level folder, for something only that level uses.
 
 The `$schema` line gives autocomplete and inline errors in Cursor and VS Code.
 
 ### New level
 
-Copy a level folder and rename it. `level-2` is enough. The game finds `level.json` inside it. Change `name`, `startScene`, the pictures, and the sounds. The debug panel lists it on the next reload.
+Add `content/levels/level-2/level.json`. Point its scenes at the files in `shared/`. The debug panel lists it on the next reload.
 
 ### Sound and clicks
 
@@ -117,7 +117,7 @@ Copy a level folder and rename it. `level-2` is enough. The game finds `level.js
 
 | Action | Effect |
 | --- | --- |
-| `{ "sound": "audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
+| `{ "sound": "/shared/audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
 | `{ "dialogue": "intro" }` | Opens that dialogue and waits until it closes |
 | `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
 | `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
@@ -145,7 +145,7 @@ One file per dialogue in `content/dialogues/`. The file name is the id, so `intr
   "$schema": "../schemas/dialogue.schema.json",
   "lines": [
     { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
-    { "speaker": "Unknown", "text": "Are you still there?", "audio": "levels/level-1/audio/whisper.wav" }
+    { "speaker": "Unknown", "text": "Are you still there?", "audio": "shared/audio/whisper.wav" }
   ]
 }
 ```

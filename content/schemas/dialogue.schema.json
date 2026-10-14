@@ -22,7 +22,7 @@
           "text": { "type": "string" },
           "audio": {
             "type": "string",
-            "description": "Sound played when the line appears. Path from content/, for example levels/level-1/audio/whisper.wav."
+            "description": "Sound played when the line appears. Path from content/, for example shared/audio/whisper.wav."
           }
         }
       }

@@ -6,6 +6,7 @@ export class DialogueManager {
   private index = 0;
   private active = false;
   private onClose: (() => void) | null = null;
+  private onLine: ((line: DialogueLine) => void) | null = null;
 
   constructor(private readonly box: DialogueBox) {
     this.box.hide();
@@ -16,7 +17,11 @@ export class DialogueManager {
   }
 
   /** onClose runs once, when the last line is passed or the dialogue is closed. */
-  start(lines: readonly DialogueLine[], onClose?: () => void): void {
+  start(
+    lines: readonly DialogueLine[],
+    onClose?: () => void,
+    onLine?: (line: DialogueLine) => void,
+  ): void {
     this.close();
     if (lines.length === 0) {
       onClose?.();
@@ -27,6 +32,7 @@ export class DialogueManager {
     this.index = 0;
     this.active = true;
     this.onClose = onClose ?? null;
+    this.onLine = onLine ?? null;
     this.showCurrent();
   }
 
@@ -50,6 +56,7 @@ export class DialogueManager {
     this.lines = [];
     this.index = 0;
     this.onClose = null;
+    this.onLine = null;
     this.box.hide();
     onClose?.();
   }
@@ -65,5 +72,6 @@ export class DialogueManager {
       return;
     }
     this.box.show(line.speaker, line.text);
+    this.onLine?.(line);
   }
 }

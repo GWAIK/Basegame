@@ -19,7 +19,11 @@
             "type": "string",
             "description": "Name shown above the line. Leave it out for narration."
           },
-          "text": { "type": "string" }
+          "text": { "type": "string" },
+          "audio": {
+            "type": "string",
+            "description": "Sound played when the line appears. Path from content/, for example levels/level-1/audio/whisper.wav."
+          }
         }
       }
     }

@@ -1,5 +1,5 @@
 import { ContentProblems, parseDialogue, parseLevel } from './parse';
-import type { DialogueDef, LevelDef, SceneDef } from './types';
+import type { ActionDef, DialogueDef, LevelDef, SceneDef } from './types';
 
 /*
  * Everything under content/ is found at build time.
@@ -98,13 +98,33 @@ export class ContentLibrary {
     return this.assets.get(assetKey(levelId, path)) ?? null;
   }
 
+  /** URL of an asset whose path starts at content/, such as a dialogue voice line. */
+  contentAssetUrl(path: string): string | null {
+    return this.assets.get(contentKey(path)) ?? null;
+  }
+
   private checkReferences(problems: ContentProblems): void {
+    for (const dialogue of this.dialogues.values()) {
+      const file = `content/dialogues/${dialogue.id}.json`;
+      dialogue.lines.forEach((line, index) => {
+        if (line.audio) {
+          this.checkKey(contentKey(line.audio), `${file} → lines[${index}].audio`, problems);
+        }
+      });
+    }
+
     for (const level of this.levels) {
       const file = `content/levels/${level.id}/level.json`;
+      if (level.ambience) {
+        this.checkAsset(level.id, level.ambience.file, `${file} → ambience.file`, problems);
+      }
       for (const scene of level.scenes) {
         const where = `${file} → scenes.${scene.id}`;
         if (scene.background) {
           this.checkAsset(level.id, scene.background, `${where}.background`, problems);
+        }
+        if (scene.ambience) {
+          this.checkAsset(level.id, scene.ambience.file, `${where}.ambience.file`, problems);
         }
         scene.characters.forEach((character, index) => {
           this.checkAsset(level.id, character.image, `${where}.characters[${index}].image`, problems);
@@ -112,12 +132,42 @@ export class ContentLibrary {
         if (scene.dialogue && !this.dialogues.has(scene.dialogue)) {
           problems.add(where, `dialogue "${scene.dialogue}" not found in content/dialogues`);
         }
+        scene.onEnter.forEach((action, index) => {
+          this.checkAction(level, action, `${where}.onEnter[${index}]`, problems);
+        });
+        scene.triggers.forEach((trigger, triggerIndex) => {
+          trigger.actions.forEach((action, actionIndex) => {
+            this.checkAction(
+              level,
+              action,
+              `${where}.triggers[${triggerIndex}].actions[${actionIndex}]`,
+              problems,
+            );
+          });
+        });
       }
     }
   }
 
+  private checkAction(level: LevelDef, action: ActionDef, where: string, problems: ContentProblems): void {
+    if (action.type === 'sound') {
+      this.checkAsset(level.id, action.file, `${where}.sound`, problems);
+      return;
+    }
+    if (action.type === 'dialogue' && !this.dialogues.has(action.id)) {
+      problems.add(where, `dialogue "${action.id}" not found in content/dialogues`);
+      return;
+    }
+    if (action.type === 'go' && !level.scenes.some((scene) => scene.id === action.sceneId)) {
+      problems.add(where, `"go" is "${action.sceneId}", which is not a scene in this level`);
+    }
+  }
+
   private checkAsset(levelId: string, path: string, where: string, problems: ContentProblems): void {
-    const key = assetKey(levelId, path);
+    this.checkKey(assetKey(levelId, path), where, problems);
+  }
+
+  private checkKey(key: string, where: string, problems: ContentProblems): void {
     if (this.assets.has(key)) {
       return;
     }
@@ -137,6 +187,14 @@ function assetKey(levelId: string, path: string): string {
     return `${CONTENT_ROOT}${clean}`;
   }
   return `${CONTENT_ROOT}/levels/${levelId}/${clean}`;
+}
+
+function contentKey(path: string): string {
+  const clean = path.trim().replace(/^\.\//, '');
+  if (clean.startsWith('/')) {
+    return `${CONTENT_ROOT}${clean}`;
+  }
+  return `${CONTENT_ROOT}/${clean}`;
 }
 
 function displayPath(key: string): string {

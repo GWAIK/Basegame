@@ -15,6 +15,10 @@
       "type": "string",
       "description": "Scene id opened when the level starts. Defaults to the first scene."
     },
+    "ambience": {
+      "$ref": "#/definitions/cue",
+      "description": "Looping background sound for the whole level. A scene can replace it with its own."
+    },
     "scenes": {
       "type": "object",
       "description": "Scenes keyed by id. The id is used by startScene and by other files.",
@@ -46,9 +50,125 @@
         },
         "dialogue": {
           "type": "string",
-          "description": "Dialogue id from content/dialogues, played when the scene opens."
+          "description": "Dialogue id from content/dialogues, played when the scene opens, before onEnter."
+        },
+        "ambience": {
+          "$ref": "#/definitions/cue",
+          "description": "Replaces the level ambience while this scene is open."
+        },
+        "onEnter": {
+          "type": "array",
+          "description": "Actions run when the scene opens, after dialogue.",
+          "items": { "$ref": "#/definitions/action" }
+        },
+        "triggers": {
+          "type": "array",
+          "description": "Invisible boxes, in pixels of the background. A click runs their actions. The debug panel can draw them.",
+          "items": { "$ref": "#/definitions/trigger" }
         }
       }
+    },
+    "cue": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Sound file in the level folder, for example audio/room.ogg. It loops."
+        },
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "required": ["id", "x", "y", "width", "height", "actions"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Name used in tools and error messages."
+        },
+        "x": {
+          "type": "number",
+          "description": "Center of the rectangle, in pixels of the background."
+        },
+        "y": {
+          "type": "number",
+          "description": "Center of the rectangle, in pixels of the background."
+        },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "actions": {
+          "type": "array",
+          "description": "Run in order on click. sound does not wait. dialogue waits. go opens a scene and stops the list.",
+          "items": { "$ref": "#/definitions/action" }
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["sound"],
+          "additionalProperties": false,
+          "properties": {
+            "sound": {
+              "type": "string",
+              "description": "Sound file in the level folder, for example audio/click.wav."
+            },
+            "volume": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["dialogue"],
+          "additionalProperties": false,
+          "properties": {
+            "dialogue": {
+              "type": "string",
+              "description": "Dialogue id from content/dialogues."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["go"],
+          "additionalProperties": false,
+          "properties": {
+            "go": {
+              "type": "string",
+              "description": "Scene id in this same level."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["shake"],
+          "additionalProperties": false,
+          "properties": {
+            "shake": {
+              "description": "true uses the default shake. An object can set intensity (pixels) and duration (milliseconds).",
+              "oneOf": [
+                { "type": "boolean", "const": true },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "intensity": { "type": "number", "minimum": 0 },
+                    "duration": { "type": "number", "minimum": 0 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "character": {
       "type": "object",

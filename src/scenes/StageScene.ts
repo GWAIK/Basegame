@@ -3,8 +3,9 @@ import type { AnimatedWebp } from '../animation/AnimatedWebp';
 import type { AssetLoader, LoadedImage } from '../assets/AssetLoader';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { CharacterDef, LevelDef, SceneDef } from '../content/types';
+import type { CharacterDef, LevelDef, SceneDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
+import { Triggers } from '../triggers/Triggers';
 import { fitScene } from './fitScene';
 
 const PLACEHOLDER_WIDTH = 1920;
@@ -19,6 +20,7 @@ export class StageScene extends Scene {
   private readonly animations: AnimatedWebp[] = [];
   private sceneWidth = PLACEHOLDER_WIDTH;
   private sceneHeight = PLACEHOLDER_HEIGHT;
+  private readonly triggers: Triggers;
 
   constructor(
     readonly level: LevelDef,
@@ -28,6 +30,13 @@ export class StageScene extends Scene {
   ) {
     super();
     this.root.label = `scene:${level.id}/${definition.id}`;
+    this.triggers = new Triggers(definition.triggers);
+    this.foregroundLayer.addChild(this.triggers.root);
+  }
+
+  /** What a trigger click does. The box itself lives in Triggers. */
+  setTriggerHandler(handler: (trigger: TriggerDef) => void): void {
+    this.triggers.onActivate = handler;
   }
 
   async load(): Promise<void> {
@@ -53,9 +62,27 @@ export class StageScene extends Scene {
       animation.update(deltaMS);
     }
     this.layout();
+    this.triggers.sync(this.root.scale.x);
+  }
+
+  override onPointerDown(x: number, y: number): void {
+    this.triggers.pointerDown(x, y);
+  }
+
+  override onPointerMove(x: number, y: number): string | null {
+    return this.triggers.pointerMove(x, y);
+  }
+
+  override onPointerUp(): void {
+    this.triggers.pointerUp();
+  }
+
+  override isCapturingPointer(): boolean {
+    return this.triggers.isDragging;
   }
 
   override destroy(): void {
+    this.triggers.dispose();
     super.destroy();
     for (const animation of this.animations) {
       animation.destroy();

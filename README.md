@@ -31,19 +31,20 @@ npm run preview   # serves dist/ locally
 content/
   levels/
     level-1/
-      level.json          scenes of this level
+      level.json          scenes, ambience, and interactions
       backgrounds/        scene images
       characters/         character images
       foreground/         foreground art
+      audio/              ambience and sounds for this level
   dialogues/
     intro.json            one file per dialogue
   ui/                     shared interface art
   schemas/                editor autocomplete for the JSON files
 ```
 
-Everything here is found automatically. A new level folder, dialogue file, or image needs no code change.
+Everything here is found automatically. A new level is a copy of a level folder with a new name. No code change, and nothing to register.
 
-Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files (MP3, OGG, WAV, M4A) are already packaged, ready for an audio feature.
+Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files can be MP3, OGG, WAV, or M4A.
 
 ### Add a scene
 
@@ -64,10 +65,25 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
       "name": "Test",
       "fit": "cover",
       "background": "backgrounds/BG1_test.webp",
+      "ambience": { "file": "audio/room.wav", "volume": 0.65 },
       "characters": [
         { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
       ],
-      "dialogue": "intro"
+      "triggers": [
+        {
+          "id": "ticket",
+          "x": 640,
+          "y": 300,
+          "width": 864,
+          "height": 486,
+          "actions": [
+            { "sound": "audio/click.wav" },
+            { "dialogue": "intro" },
+            { "shake": { "intensity": 8, "duration": 280 } },
+            { "go": "hana" }
+          ]
+        }
+      ]
     }
   }
 }
@@ -77,14 +93,42 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
 | --- | --- |
 | `startScene` | Scene opened when the level starts. Defaults to the first one |
 | `name` | Label in the debug panel |
+| `ambience` | Looping background sound. On a scene, it replaces the level's ambience |
 | `fit` | `cover` fills the screen and crops the edges. `contain` shows the whole image, with bars around it |
 | `background` | Image path. Leave it out for a dark placeholder |
 | `characters` | Images placed on the background |
-| `dialogue` | Dialogue played when the scene opens |
+| `dialogue` | Dialogue played when the scene opens, before `onEnter` |
+| `onEnter` | Actions run when the scene opens |
+| `triggers` | Invisible boxes. A click runs their actions |
 
 Paths are relative to the level folder. A path starting with `/` starts from `content/`, for shared art: `/ui/frame.png`.
 
 The `$schema` line gives autocomplete and inline errors in Cursor and VS Code.
+
+### New level
+
+Copy a level folder and rename it. `level-2` is enough. The game finds `level.json` inside it. Change `name`, `startScene`, the pictures, and the sounds. The debug panel lists it on the next reload.
+
+### Sound and clicks
+
+`ambience` on the level loops under every scene. A scene with its own `ambience` replaces it until the player leaves. `volume` goes from 0 to 1.
+
+`onEnter` and each trigger `actions` list run in order:
+
+| Action | Effect |
+| --- | --- |
+| `{ "sound": "audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
+| `{ "dialogue": "intro" }` | Opens that dialogue and waits until it closes |
+| `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
+| `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
+
+A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. The box is invisible. The pointer changes over it.
+
+The boxes are drawn by one component, `Triggers`. A scene parents it and sets what a click does. The same component can be used on any scene.
+
+In development, Triggers → Show boxes draws every box. Click one to select it: drag the box to move it, drag a white handle to resize it. Values shows `id`, `x`, `y`, `width`, and `height`. Copy values puts that line on the clipboard so it can replace the trigger in `level.json`. While the boxes are shown, a click edits instead of running the action. The checkbox is not included in a build.
+
+The browser stays silent until the first click or key press. The ambience and any sound requested before that start on that gesture. The debug panel has a Master slider for the whole mix.
 
 ### Place a character
 
@@ -101,12 +145,12 @@ One file per dialogue in `content/dialogues/`. The file name is the id, so `intr
   "$schema": "../schemas/dialogue.schema.json",
   "lines": [
     { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
-    { "speaker": "Unknown", "text": "Are you still there?" }
+    { "speaker": "Unknown", "text": "Are you still there?", "audio": "levels/level-1/audio/whisper.wav" }
   ]
 }
 ```
 
-Leave `speaker` out for narration. Click, Space, or Enter advances. Escape closes.
+Leave `speaker` out for narration. `audio` is a path from `content/`, played when that line appears. Click, Space, or Enter advances. Escape closes.
 
 ### When something is wrong
 
@@ -129,14 +173,16 @@ src/
   core/GameEvents.ts           the list of game events
   content/ContentLibrary.ts    finds and checks everything in content/
   content/parse.ts             reads level and dialogue JSON
-  content/types.ts             level, scene, and dialogue types
+  content/types.ts             level, scene, dialogue, and action types
+  audio/AudioPlayer.ts         looping ambience and overlapping effects
+  triggers/Triggers.ts         click boxes, debug gizmos
   scenes/StageScene.ts         draws a scene from level.json
   scenes/fitScene.ts           cover and contain scaling
   assets/AssetLoader.ts        images and animated WebP
   animation/AnimatedWebp.ts    frame-by-frame WebP playback
   camera/                      mouse look, shake, headbob, tuning
   dialogue/                    dialogue box and sequencing
-  debug/                       debug panel and content problem list
+  debug/                       debug panel, trigger boxes, and content problem list
 ```
 
 ```text
@@ -167,7 +213,7 @@ Features listen to the game instead of being wired into it:
 
 ```ts
 game.events.on('scene:enter', ({ levelId, sceneId }) => {
-  // start ambience for this scene
+  // react when a scene opens
 });
 game.events.on('dialogue:end', ({ dialogueId }) => {
   // unlock the next step

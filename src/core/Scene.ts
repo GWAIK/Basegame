@@ -41,6 +41,22 @@ export abstract class Scene {
   /** Screen coordinates. Not called while a dialogue is open. */
   onPointerDown(_x: number, _y: number): void {}
 
+  /**
+   * Screen coordinates. Not called while a dialogue is open.
+   * Return a CSS cursor when the pointer is over something, or null.
+   */
+  onPointerMove(_x: number, _y: number): string | null {
+    return null;
+  }
+
+  /** Screen coordinates. Not called while a dialogue is open. */
+  onPointerUp(_x: number, _y: number): void {}
+
+  /** True while a scene is dragging something and the camera should hold still. */
+  isCapturingPointer(): boolean {
+    return false;
+  }
+
   /** Not called while a dialogue is open. */
   onKeyDown(_code: string): void {}
 

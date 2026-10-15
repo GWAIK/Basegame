@@ -3,7 +3,7 @@ import { AssetLoader } from '../assets/AssetLoader';
 import { AudioPlayer } from '../audio/AudioPlayer';
 import { Camera } from '../camera/Camera';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { ActionDef, LevelDef, SceneDef } from '../content/types';
+import type { ActionDef, LevelDef, SceneDef, TriggerDef } from '../content/types';
 import { devTools, setDevToolsEnabled } from '../debug/devTools';
 import type { InkEffect } from '../dialogue/inkTags';
 import { DialogueBox } from '../dialogue/DialogueBox';
@@ -67,6 +67,7 @@ export class Game {
       this.events.emit('update', { deltaMS: ticker.deltaMS });
     });
     this.app.renderer.on('resize', () => this.handleResize());
+    document.addEventListener('fullscreenchange', () => this.refreshFullscreenLabel());
     this.bindInput();
 
     const level = this.content.level('menu') ?? this.content.firstLevel;
@@ -117,12 +118,44 @@ export class Game {
     this.app.canvas.style.cursor = '';
     this.world.addChild(next.root);
     this.events.emit('scene:enter', this.currentLocation);
+    this.refreshFullscreenLabel();
     this.syncAmbience(level, definition);
 
     const entering = enterActions(definition);
     if (entering.length > 0) {
       void this.runActions(level, entering);
     }
+  }
+
+  private async toggleFullscreen(): Promise<void> {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      await this.showNotice('Fullscreen is not available here.');
+    }
+    this.refreshFullscreenLabel();
+  }
+
+  /** The settings button says whether the game fills the screen. Escape leaves fullscreen too. */
+  private refreshFullscreenLabel(): void {
+    const trigger = this.fullscreenTrigger();
+    if (!trigger) {
+      return;
+    }
+    trigger.label = document.fullscreenElement ? 'Fullscreen: On' : 'Fullscreen: Off';
+  }
+
+  private fullscreenTrigger(): TriggerDef | null {
+    if (!this.currentLocation) {
+      return null;
+    }
+    const level = this.content.level(this.currentLocation.levelId);
+    const scene = level ? this.content.scene(level, this.currentLocation.sceneId) : null;
+    return scene?.triggers.find((trigger) => trigger.actions.some((action) => action.type === 'fullscreen')) ?? null;
   }
 
   private async toggleDevTools(): Promise<void> {
@@ -256,6 +289,8 @@ export class Game {
         return;
       } else if (action.type === 'dev') {
         await this.toggleDevTools();
+      } else if (action.type === 'fullscreen') {
+        await this.toggleFullscreen();
       } else {
         window.close();
         await this.showNotice('Close this tab to leave.');

@@ -42,7 +42,7 @@ const CUE_KEYS = ['file', 'volume'];
 const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
 const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
-const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev'] as const;
+const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen'] as const;
 const DEFAULT_TEXT_SIZE = 32;
 const FITS: readonly SceneFit[] = ['cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
@@ -244,6 +244,9 @@ function parseAction(raw: unknown, where: string, problems: ContentProblems): Ac
   if (kind === 'dev') {
     return parseDevAction(raw, where, problems);
   }
+  if (kind === 'fullscreen') {
+    return parseFullscreenAction(raw, where, problems);
+  }
   return parseShakeAction(raw, where, problems);
 }
 
@@ -281,6 +284,15 @@ function parseLevelAction(raw: Json, where: string, problems: ContentProblems): 
     return null;
   }
   return { type: 'level', levelId };
+}
+
+function parseFullscreenAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['fullscreen'], where, problems);
+  if (raw.fullscreen !== true) {
+    problems.add(where, '"fullscreen" must be true');
+    return null;
+  }
+  return { type: 'fullscreen' };
 }
 
 function parseDevAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {

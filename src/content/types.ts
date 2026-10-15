@@ -22,6 +22,7 @@ export interface AudioCue {
  * One step a scene or a trigger can run.
  * sound starts and does not wait. dialogue waits until it closes.
  * go, level, and quit end the list. dev toggles the debug tools.
+ * fullscreen switches between the window and the whole screen.
  */
 export type ActionDef =
   | { type: 'sound'; file: string; volume: number }
@@ -30,7 +31,8 @@ export type ActionDef =
   | { type: 'level'; levelId: string }
   | { type: 'shake'; intensity: number; durationMs: number }
   | { type: 'quit' }
-  | { type: 'dev' };
+  | { type: 'dev' }
+  | { type: 'fullscreen' };
 
 /**
  * A click box. x and y are its center, in pixels of the background.

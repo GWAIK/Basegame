@@ -5,6 +5,7 @@ import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
 import type { CharacterDef, LevelDef, SceneDef, TextDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
+import { SceneHandles } from '../editor/SceneHandles';
 import { Triggers } from '../triggers/Triggers';
 import { fitScene } from './fitScene';
 
@@ -21,6 +22,9 @@ export class StageScene extends Scene {
   private sceneWidth = PLACEHOLDER_WIDTH;
   private sceneHeight = PLACEHOLDER_HEIGHT;
   private readonly triggers: Triggers;
+  private readonly characterViews: Container[] = [];
+  private readonly textViews: Text[] = [];
+  private readonly handles: SceneHandles | null;
 
   constructor(
     readonly level: LevelDef,
@@ -32,6 +36,20 @@ export class StageScene extends Scene {
     this.root.label = `scene:${level.id}/${definition.id}`;
     this.triggers = new Triggers(definition.triggers);
     this.foregroundLayer.addChild(this.triggers.root);
+    this.handles = import.meta.env.DEV
+      ? new SceneHandles({
+          scene: definition,
+          root: this.root,
+          background: this.backgroundLayer,
+          characters: this.characterViews,
+          texts: this.textViews,
+          triggers: this.triggers,
+          sceneSize: () => ({ width: this.sceneWidth, height: this.sceneHeight }),
+        })
+      : null;
+    if (this.handles) {
+      this.foregroundLayer.addChild(this.handles.overlay);
+    }
   }
 
   /** What a trigger click does. The box itself lives in Triggers. */
@@ -63,23 +81,35 @@ export class StageScene extends Scene {
       animation.update(deltaMS);
     }
     this.layout();
+    this.handles?.sync(this.root.scale.x);
     this.triggers.sync(this.root.scale.x);
   }
 
   override onPointerDown(x: number, y: number): void {
+    if (this.handles?.active) {
+      this.handles.pointerDown(x, y);
+      return;
+    }
     this.triggers.pointerDown(x, y);
   }
 
   override onPointerMove(x: number, y: number): string | null {
+    if (this.handles?.active) {
+      return this.handles.pointerMove(x, y);
+    }
     return this.triggers.pointerMove(x, y);
   }
 
   override onPointerUp(): void {
+    if (this.handles?.active) {
+      this.handles.pointerUp();
+      return;
+    }
     this.triggers.pointerUp();
   }
 
   override isCapturingPointer(): boolean {
-    return this.triggers.isDragging;
+    return this.handles?.isDragging === true || this.triggers.isDragging;
   }
 
   override destroy(): void {
@@ -127,7 +157,9 @@ export class StageScene extends Scene {
     const layer = new Container();
     layer.label = 'texts';
     for (const item of this.definition.texts) {
-      layer.addChild(createSceneText(item));
+      const text = createSceneText(item);
+      this.textViews.push(text);
+      layer.addChild(text);
     }
     this.foregroundLayer.addChildAt(layer, 0);
   }
@@ -139,6 +171,7 @@ export class StageScene extends Scene {
     }
     display.scale.set(character.scale);
     display.position.set(character.x, character.y);
+    this.characterViews.push(display);
     this.characterLayer.addChild(display);
   }
 

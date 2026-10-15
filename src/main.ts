@@ -17,7 +17,9 @@ await game.start(host);
 
 if (import.meta.env.DEV) {
   const { createDebugPanel } = await import('./debug/DebugPanel');
+  const { createSceneDock } = await import('./editor/SceneDock');
   const { showContentProblems } = await import('./debug/ContentProblemsOverlay');
   createDebugPanel(game);
+  createSceneDock(game);
   showContentProblems(content.problems);
 }

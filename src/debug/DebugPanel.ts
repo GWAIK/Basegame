@@ -42,6 +42,7 @@ function addNavigation(gui: GUI, game: Game): void {
   });
 
   let sceneController: Controller | null = null;
+  let shownLevel = state.level;
   const rebuildScenes = () => {
     sceneController?.destroy();
     const level = game.content.level(state.level);
@@ -58,15 +59,15 @@ function addNavigation(gui: GUI, game: Game): void {
   rebuildScenes();
 
   game.events.on('scene:enter', ({ levelId, sceneId }) => {
-    const levelChanged = state.level !== levelId;
     state.level = levelId;
     state.scene = sceneId;
     levelController.updateDisplay();
-    if (levelChanged) {
+    if (shownLevel !== levelId) {
+      shownLevel = levelId;
       rebuildScenes();
-    } else {
-      sceneController?.updateDisplay();
+      return;
     }
+    sceneController?.updateDisplay();
   });
 }
 

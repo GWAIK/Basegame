@@ -170,6 +170,10 @@ File names are case-sensitive on itch.io. `Hana.webp` and `hana.webp` are differ
 
 In development, a panel on the right lists every level, scene, and dialogue found in `content/`, plus camera tuning and test events. Press H to hide or show it. It is not included in a build.
 
+### Scene
+
+The Scene button, on the left, lists what the current scene draws: the background, characters, texts, and triggers. It is separate from the debug panel. Click a name, or click the asset on the picture, to select it. Drag it to move it. A character's corner handle changes its scale. A trigger's handles change its box. Hide takes it off the picture while you work; Close shows everything again. Copy values, then paste that line into `level.json`. A reload reads the file again, so a move is kept only after it is pasted. The Scene button is not included in a build.
+
 ## Engine
 
 ```text
@@ -191,6 +195,7 @@ src/
   camera/                      mouse look, shake, headbob, tuning
   dialogue/                    dialogue box and sequencing
   debug/                       debug panel, trigger boxes, and content problem list
+  editor/                      scene list, selection, and move handles
 ```
 
 ```text

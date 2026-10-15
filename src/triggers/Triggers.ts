@@ -36,6 +36,8 @@ export class Triggers {
   private drag: Drag | null = null;
   private hovered: string | null = null;
   private faceKey = '';
+  private hiddenKey = '';
+  private hiddenTriggerIds: ReadonlySet<string> = new Set();
   private shown = false;
   private drawnScale = 0;
 
@@ -128,6 +130,20 @@ export class Triggers {
     this.redraw(this.drawnScale || 1);
   }
 
+  /** Hides these trigger ids in the scene view. An empty set shows them all. */
+  setHiddenTriggers(ids: ReadonlySet<string>): void {
+    const key = [...ids].sort().join('|');
+    if (key === this.hiddenKey) {
+      return;
+    }
+    this.hiddenKey = key;
+    this.hiddenTriggerIds = ids;
+    this.faceKey = '';
+    if (this.shown) {
+      this.redraw(this.drawnScale || 1);
+    }
+  }
+
   /** Call every frame after the scene has been scaled. */
   sync(sceneScale: number): void {
     const scale = sceneScale > 0 ? sceneScale : 1;
@@ -156,6 +172,10 @@ export class Triggers {
   dispose(): void {
     this.drag = null;
     this.clearSelection();
+  }
+
+  private isHidden(trigger: TriggerDef): boolean {
+    return this.hiddenTriggerIds.has(trigger.id);
   }
 
   private get editing(): boolean {
@@ -266,7 +286,7 @@ export class Triggers {
   }
 
   private drawFaces(sceneScale: number): void {
-    const labeled = this.definitions.filter((trigger) => trigger.label);
+    const labeled = this.definitions.filter((trigger) => trigger.label && !this.isHidden(trigger));
     const key =
       labeled
         .map((trigger) => `${trigger.id}:${trigger.x}:${trigger.y}:${trigger.width}:${trigger.height}:${trigger.label}`)
@@ -284,9 +304,10 @@ export class Triggers {
   private redraw(sceneScale: number): void {
     this.drawnScale = sceneScale;
     this.debugLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    const visible = this.definitions.filter((trigger) => !this.isHidden(trigger));
     const ordered = [
-      ...this.definitions.filter((trigger) => trigger !== this.selected),
-      ...(this.selected ? [this.selected] : []),
+      ...visible.filter((trigger) => trigger !== this.selected),
+      ...(this.selected && visible.includes(this.selected) ? [this.selected] : []),
     ];
     for (const trigger of ordered) {
       this.debugLayer.addChild(drawTrigger(trigger, trigger === this.selected, sceneScale));

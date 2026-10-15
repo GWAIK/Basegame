@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { TriggerDef } from '../content/types';
+import { devTools } from '../debug/devTools';
 import { setTriggerSelection, triggerDebug } from '../debug/triggerDebug';
 
 const MIN_SIZE = 32;
@@ -179,7 +180,7 @@ export class Triggers {
   }
 
   private get editing(): boolean {
-    return import.meta.env.DEV && triggerDebug.visible;
+    return devTools.enabled && triggerDebug.visible;
   }
 
   private toLocal(screenX: number, screenY: number): { x: number; y: number } | null {

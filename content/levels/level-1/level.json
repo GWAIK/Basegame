@@ -29,7 +29,7 @@
           "height": 486,
           "actions": [
             { "sound": "/shared/audio/click.wav" },
-            { "dialogue": "intro" },
+            { "dialogue": "paper" },
             { "shake": { "intensity": 8, "duration": 280 } },
             { "go": "hana" }
           ]

@@ -55,7 +55,7 @@
         },
         "dialogue": {
           "type": "string",
-          "description": "Dialogue id from content/dialogues, played when the scene opens, before onEnter."
+          "description": "Ink knot from content/story/story.ink, played when the scene opens, before onEnter."
         },
         "ambience": {
           "$ref": "#/definitions/cue",
@@ -146,7 +146,7 @@
           "properties": {
             "dialogue": {
               "type": "string",
-              "description": "Dialogue id from content/dialogues."
+              "description": "Ink knot name from content/story/story.ink, such as intro."
             }
           }
         },
@@ -169,6 +169,18 @@
             "level": {
               "type": "string",
               "description": "Level folder name to open, such as level-1."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["dev"],
+          "additionalProperties": false,
+          "properties": {
+            "dev": {
+              "type": "boolean",
+              "const": true,
+              "description": "Shows or hides the debug panel and the scene tools. Works in a published build."
             }
           }
         },

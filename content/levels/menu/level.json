@@ -70,6 +70,18 @@
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "go": "main" }
           ]
+        },
+        {
+          "id": "dev",
+          "label": "Dev mode",
+          "x": 960,
+          "y": 760,
+          "width": 240,
+          "height": 48,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
+            { "dev": true }
+          ]
         }
       ]
     }

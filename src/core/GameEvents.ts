@@ -14,4 +14,6 @@ export interface GameEvents {
   'scene:exit': SceneLocation;
   'dialogue:start': { dialogueId: string };
   'dialogue:end': { dialogueId: string };
+  /** A choice tag `# event: name`. The game decides what that name does. */
+  'dialogue:event': { name: string };
 }

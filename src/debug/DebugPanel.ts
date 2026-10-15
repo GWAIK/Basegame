@@ -5,7 +5,7 @@ import { onTriggerSelection, triggerDebug, triggerSnippet } from './triggerDebug
 
 /**
  * Floating debug panel. Only created in development.
- * Levels, scenes, and dialogues are read from content/, so new content shows up here by itself.
+ * Levels, scenes, and Ink knots are read from content/, so new content shows up here by itself.
  * Press H to hide or show it.
  */
 export function createDebugPanel(game: Game): GUI {
@@ -73,7 +73,7 @@ function addNavigation(gui: GUI, game: Game): void {
 
 function addDialogues(gui: GUI, game: Game): void {
   const folder = gui.addFolder('Dialogues');
-  for (const id of game.content.dialogues.keys()) {
+  for (const id of game.content.knots) {
     folder.add({ play: () => run(() => game.playDialogue(id)) }, 'play').name(id);
   }
 }

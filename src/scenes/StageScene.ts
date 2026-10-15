@@ -5,6 +5,7 @@ import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
 import type { CharacterDef, LevelDef, SceneDef, TextDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
+import { devTools } from '../debug/devTools';
 import { SceneHandles } from '../editor/SceneHandles';
 import { Triggers } from '../triggers/Triggers';
 import { fitScene } from './fitScene';
@@ -36,7 +37,7 @@ export class StageScene extends Scene {
     this.root.label = `scene:${level.id}/${definition.id}`;
     this.triggers = new Triggers(definition.triggers);
     this.foregroundLayer.addChild(this.triggers.root);
-    this.handles = import.meta.env.DEV
+    this.handles = devTools.enabled
       ? new SceneHandles({
           scene: definition,
           root: this.root,

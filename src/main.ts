@@ -1,6 +1,7 @@
 import './style.css';
 import { ContentLibrary } from './content/ContentLibrary';
 import { Game } from './core/Game';
+import { devTools, mountDevTools } from './debug/devTools';
 
 const host = document.querySelector('#app');
 if (!(host instanceof HTMLElement)) {
@@ -15,11 +16,6 @@ for (const problem of content.problems) {
 const game = new Game(content);
 await game.start(host);
 
-if (import.meta.env.DEV) {
-  const { createDebugPanel } = await import('./debug/DebugPanel');
-  const { createSceneDock } = await import('./editor/SceneDock');
-  const { showContentProblems } = await import('./debug/ContentProblemsOverlay');
-  createDebugPanel(game);
-  createSceneDock(game);
-  showContentProblems(content.problems);
+if (devTools.enabled) {
+  await mountDevTools(game);
 }

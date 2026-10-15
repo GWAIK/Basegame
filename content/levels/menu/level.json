@@ -55,15 +55,26 @@
       "fit": "cover",
       "look": false,
       "texts": [
-        { "text": "Settings", "x": 960, "y": 380, "size": 56 },
-        { "text": "Settings will be available later.", "x": 960, "y": 480, "size": 28 }
+        { "text": "Settings", "x": 960, "y": 300, "size": 56 }
       ],
       "triggers": [
+        {
+          "id": "fullscreen",
+          "label": "Fullscreen: Off",
+          "x": 960,
+          "y": 500,
+          "width": 460,
+          "height": 72,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "fullscreen": true }
+          ]
+        },
         {
           "id": "back",
           "label": "Back",
           "x": 960,
-          "y": 640,
+          "y": 620,
           "width": 460,
           "height": 72,
           "actions": [

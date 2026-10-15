@@ -113,7 +113,7 @@ Add `content/levels/level-2/level.json`. Point its scenes at the files in `share
 
 ### Menu
 
-The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with a Back button and a smaller Dev mode button. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Dev mode uses `{ "dev": true }` and shows the debug panel, including in a published build. Change the words, positions, and sounds in that `level.json`.
+The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with Fullscreen, a Back button, and a smaller Dev mode button. Fullscreen uses `{ "fullscreen": true }` and the button reads On or Off. Escape leaves fullscreen as well. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Dev mode uses `{ "dev": true }` and shows the debug panel, including in a published build. Change the words, positions, and sounds in that `level.json`.
 
 ### Sound and clicks
 
@@ -129,6 +129,7 @@ The game opens `content/levels/menu` when that folder exists. It is a normal lev
 | `{ "level": "level-1" }` | Opens that level, then stops the list |
 | `{ "quit": true }` | Tries to close the window. If the tab stays open, a line asks the player to close it |
 | `{ "dev": true }` | Shows or hides the debug panel and the scene tools |
+| `{ "fullscreen": true }` | Fills the screen, or returns to the window. The button label follows |
 | `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
 
 A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. A `label` draws that word as a button. Without a label the box is invisible. The pointer changes over it.

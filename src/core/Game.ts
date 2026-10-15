@@ -49,7 +49,7 @@ export class Game {
 
   async start(host: HTMLElement): Promise<void> {
     await this.app.init({
-      resizeTo: window,
+      resizeTo: host,
       background: 0x0b0c10,
       antialias: true,
       autoDensity: true,

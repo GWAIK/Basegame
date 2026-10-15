@@ -1,4 +1,3 @@
-import type GUI from 'lil-gui';
 import type { Game } from '../core/Game';
 
 /** True in local development, and after Settings → Dev mode in a published build. */
@@ -6,26 +5,23 @@ export const devTools = {
   enabled: import.meta.env.DEV,
 };
 
-let gui: GUI | null = null;
-let dock: { show: () => void; hide: () => void } | null = null;
+let editor: { show: () => void; hide: () => void } | null = null;
 let mounting: Promise<void> | null = null;
 
-/** Loads the debug panel and the scene dock once, then shows or hides them. */
+/** Loads the editor once, then shows or hides it. */
 export async function setDevToolsEnabled(game: Game, enabled: boolean): Promise<void> {
   devTools.enabled = enabled;
   if (!enabled) {
-    gui?.hide();
-    dock?.hide();
+    editor?.hide();
     return;
   }
 
   await mountDevTools(game);
-  gui?.show();
-  dock?.show();
+  editor?.show();
 }
 
 export async function mountDevTools(game: Game): Promise<void> {
-  if (gui && dock) {
+  if (editor) {
     return;
   }
   if (mounting) {
@@ -42,10 +38,11 @@ export async function mountDevTools(game: Game): Promise<void> {
 }
 
 async function loadDevTools(game: Game): Promise<void> {
-  const { createDebugPanel } = await import('./DebugPanel');
   const { createSceneDock } = await import('../editor/SceneDock');
   const { showContentProblems } = await import('./ContentProblemsOverlay');
-  gui = createDebugPanel(game);
-  dock = createSceneDock(game);
+  editor = createSceneDock(game);
+  if (!devTools.enabled) {
+    editor.hide();
+  }
   showContentProblems(game.content.problems);
 }

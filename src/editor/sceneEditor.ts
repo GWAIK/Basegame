@@ -1,4 +1,4 @@
-import type { SceneDef } from '../content/types';
+import type { CharacterDef, SceneDef, TextDef, TriggerDef } from '../content/types';
 import { triggerSnippet } from '../debug/triggerDebug';
 
 export type SceneKind = 'background' | 'character' | 'text' | 'trigger';
@@ -14,9 +14,9 @@ const structureListeners = new Set<Listener>();
 const transformListeners = new Set<Listener>();
 
 /**
- * Dev-only scene view, separate from the debug panel.
- * open turns on selection and dragging. hidden is editor-only: closing the
- * dock shows everything again, and a reload restores level.json.
+ * Dev-only scene view.
+ * open turns on selection and dragging in the viewport. hidden is editor-only:
+ * hiding the editor shows everything again, and a reload restores level.json.
  */
 export const sceneEditor = {
   open: false,
@@ -55,6 +55,45 @@ export function toggleSceneItemHidden(key: string): void {
     sceneEditor.hidden.add(key);
   }
   emitStructure();
+}
+
+const PLACE_X = 960;
+const PLACE_Y = 540;
+
+/** Adds a trigger at the middle of a 1920×1080 scene. The caller reloads the scene. */
+export function placeTrigger(scene: SceneDef): SceneSelection {
+  const triggers = scene.triggers as TriggerDef[];
+  const ids = new Set(triggers.map((trigger) => trigger.id));
+  let n = triggers.length + 1;
+  let id = `trigger-${n}`;
+  while (ids.has(id)) {
+    n += 1;
+    id = `trigger-${n}`;
+  }
+  triggers.push({
+    id,
+    label: 'Trigger',
+    x: PLACE_X,
+    y: PLACE_Y,
+    width: 280,
+    height: 72,
+    actions: [],
+  });
+  return { kind: 'trigger', index: triggers.length - 1 };
+}
+
+/** Adds a text at the middle of a 1920×1080 scene. The caller reloads the scene. */
+export function placeText(scene: SceneDef): SceneSelection {
+  const texts = scene.texts as TextDef[];
+  texts.push({ text: 'Text', x: PLACE_X, y: PLACE_Y, size: 48 });
+  return { kind: 'text', index: texts.length - 1 };
+}
+
+/** Adds a character at the middle of a 1920×1080 scene. The caller reloads the scene. */
+export function placeCharacter(scene: SceneDef, image: string): SceneSelection {
+  const characters = scene.characters as CharacterDef[];
+  characters.push({ image, x: PLACE_X, y: PLACE_Y, scale: 1 });
+  return { kind: 'character', index: characters.length - 1 };
 }
 
 /** A new scene has different objects, so the previous selection no longer applies. */

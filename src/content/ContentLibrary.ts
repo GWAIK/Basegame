@@ -104,6 +104,19 @@ export class ContentLibrary {
     return this.assets.get(contentKey(path)) ?? null;
   }
 
+  /** Image paths starting at content/, such as /shared/characters/ticket.webp. */
+  images(): readonly string[] {
+    const paths: string[] = [];
+    for (const key of this.assets.keys()) {
+      if (!/\.(png|jpe?g|webp|gif)$/i.test(key)) {
+        continue;
+      }
+      paths.push(key.startsWith('/content/') ? key.slice('/content'.length) : key);
+    }
+    paths.sort((a, b) => a.localeCompare(b));
+    return paths;
+  }
+
   private checkReferences(problems: ContentProblems): void {
     for (const level of this.levels) {
       const file = `content/levels/${level.id}/level.json`;

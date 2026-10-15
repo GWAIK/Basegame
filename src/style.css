@@ -53,140 +53,472 @@ body,
   padding-left: 18px;
 }
 
-.scene-toggle,
-.scene-dock {
+.editor {
   position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 15;
-  color: #f4f1ea;
-  font: 13px/1.4 system-ui, sans-serif;
-}
-
-.scene-toggle {
-  border: 1px solid rgba(244, 241, 234, 0.28);
-  border-radius: 4px;
-  background: rgba(12, 14, 20, 0.92);
-  color: inherit;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-.scene-dock {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 16;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 280px;
-  max-height: calc(100vh - 24px);
-  padding: 12px;
-  border: 1px solid rgba(244, 241, 234, 0.16);
-  border-radius: 8px;
-  background: rgba(12, 14, 20, 0.94);
+  width: 332px;
+  background: #1a1a1a;
+  border-left: 1px solid #0c0c0c;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.28);
+  color: #c7c7c7;
+  color-scheme: dark;
+  font: 12px/1.35 "Segoe UI", Roboto, system-ui, sans-serif;
+  user-select: none;
+  transition: transform 180ms ease;
 }
 
-.scene-dock[hidden],
-.scene-toggle[hidden] {
+.editor.is-collapsed {
+  transform: translateX(calc(100% + 24px));
+  pointer-events: none;
+}
+
+.editor[hidden] {
   display: none;
 }
 
-.scene-dock header {
+.editor-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.editor-resize:hover {
+  background: #0070e0;
+}
+
+.editor-outliner,
+.editor-details {
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  background: #1a1a1a;
+}
+
+.editor-outliner {
+  flex: 0 0 300px;
+}
+
+.editor-details {
+  flex: 1 1 auto;
+}
+
+.editor-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 28px;
+  padding: 0 8px;
+  background: #242424;
+  border-bottom: 1px solid #111;
+  color: #d8d8d8;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.scene-dock header button,
-.scene-eye,
-.scene-copy {
-  border: 1px solid rgba(244, 241, 234, 0.28);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+.editor-bar-actions {
+  display: flex;
+  gap: 4px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.editor-add,
+.editor-mode,
+.editor-copy,
+.editor-actions button {
+  border: 1px solid #4a4a4a;
+  border-radius: 2px;
+  background: #333;
+  color: #eee;
+  font: 12px/1 "Segoe UI", Roboto, system-ui, sans-serif;
   cursor: pointer;
 }
 
-.scene-dock header button,
-.scene-copy {
-  padding: 4px 8px;
+.editor-add,
+.editor-mode,
+.editor-hide {
+  height: 20px;
+  padding: 0 6px;
 }
 
-.scene-list {
-  overflow: auto;
+.editor-hide,
+.editor-tab {
+  border: 1px solid #4a4a4a;
+  border-radius: 2px;
+  background: #333;
+  color: #eee;
+  cursor: pointer;
+}
+
+.editor-hide {
+  width: 20px;
+  padding: 0;
+}
+
+.editor-hide:hover,
+.editor-tab:hover {
+  border-color: #0070e0;
+}
+
+.editor-hide svg,
+.editor-tab svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 0 auto;
+}
+
+.editor-tab {
+  position: fixed;
+  top: 8px;
+  right: 0;
+  z-index: 16;
+  width: 28px;
+  height: 36px;
+  padding: 0;
+  border-right: 0;
+  border-radius: 2px 0 0 2px;
+  background: #242424;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.35);
+}
+
+.editor-tab[hidden] {
+  display: none;
+}
+
+.editor-add {
+  width: 20px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 18px;
+}
+
+.editor-add:hover,
+.editor-mode:hover,
+.editor-copy:hover,
+.editor-actions button:hover,
+.editor-add.is-open,
+.editor-mode.is-on {
+  border-color: #0070e0;
+}
+
+.editor-mode.is-on {
+  background: #0e4f8a;
+  color: #fff;
+}
+
+.editor-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid #111;
+}
+
+.editor-nav select,
+.editor-search,
+.editor-field input,
+.editor-field select,
+.editor-values {
+  box-sizing: border-box;
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+  background: #111;
+  color: #e6e6e6;
+  font: inherit;
+}
+
+.editor-nav select,
+.editor-search,
+.editor-field input,
+.editor-field select {
+  height: 22px;
+  padding: 0 6px;
+}
+
+.editor-search {
+  width: calc(100% - 12px);
+  margin: 6px;
+}
+
+.editor-search:focus,
+.editor-nav select:focus,
+.editor-field input:focus,
+.editor-field select:focus,
+.editor-values:focus {
+  outline: 1px solid #0070e0;
+  border-color: #0070e0;
+}
+
+.editor-list,
+.editor-details-body,
+.editor-menu {
   min-height: 0;
+  overflow: auto;
 }
 
-.scene-group,
-.scene-empty,
-.scene-hint {
-  margin: 8px 0 4px;
-  color: rgba(244, 241, 234, 0.62);
-  font-size: 12px;
+.editor-list,
+.editor-details-body {
+  flex: 1;
 }
 
-.scene-row {
+.editor-list::-webkit-scrollbar,
+.editor-details-body::-webkit-scrollbar,
+.editor-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.editor-list::-webkit-scrollbar-thumb,
+.editor-details-body::-webkit-scrollbar-thumb,
+.editor-menu::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border: 2px solid #1a1a1a;
+}
+
+.editor-group,
+.editor-menu-label {
+  padding: 8px 8px 2px;
+  color: #8d8d8d;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editor-row {
   display: flex;
-  gap: 6px;
   align-items: center;
-  margin-top: 4px;
+  height: 22px;
+  padding-right: 4px;
 }
 
-.scene-row.is-selected .scene-name {
-  border-color: #ffe14a;
-  color: #fff6cc;
+.editor-row:hover {
+  background: #2a2a2a;
 }
 
-.scene-eye {
-  flex: 0 0 auto;
-  width: 52px;
-  padding: 4px 0;
+.editor-row.is-selected,
+.editor-row.is-selected:hover {
+  background: #0e4f8a;
+  color: #fff;
 }
 
-.scene-name {
+.editor-row.is-hidden .editor-name {
+  opacity: 0.4;
+}
+
+.editor-eye {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8d8d8d;
+  cursor: pointer;
+}
+
+.editor-row.is-selected .editor-eye {
+  color: #fff;
+}
+
+.editor-eye svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 0 auto;
+}
+
+.editor-name {
   flex: 1;
   min-width: 0;
+  height: 22px;
+  padding: 0 4px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 1px solid transparent;
-  border-radius: 4px;
+  border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
-  padding: 4px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.scene-field {
+.editor-empty,
+.editor-hint,
+.editor-kind {
+  margin: 0;
+  padding: 6px 8px;
+  color: #8d8d8d;
+}
+
+.editor-foot {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  margin-top: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid #111;
+  color: #8d8d8d;
+  font-size: 11px;
 }
 
-.scene-field span {
-  width: 48px;
-  color: rgba(244, 241, 234, 0.72);
+.editor-foot label,
+.editor-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #c7c7c7;
+  cursor: pointer;
 }
 
-.scene-field input,
-.scene-values {
+.editor-check {
+  padding: 6px 8px;
+}
+
+.editor-split {
+  flex: 0 0 5px;
+  background: #111;
+  cursor: row-resize;
+}
+
+.editor-split:hover {
+  background: #0070e0;
+}
+
+.editor-selection {
+  margin: 0;
+  padding: 6px 8px 0;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+.editor-category {
+  display: flex;
+  align-items: center;
   width: 100%;
-  box-sizing: border-box;
-  border: 1px solid rgba(244, 241, 234, 0.2);
-  border-radius: 4px;
-  background: #171b24;
-  color: #f4f1ea;
-  font: inherit;
+  height: 24px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-top: 1px solid #111;
+  border-bottom: 1px solid #111;
+  background: #242424;
+  color: #bdbdbd;
+  font: 11px/1 "Segoe UI", Roboto, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-category:hover {
+  color: #fff;
+}
+
+.editor-field {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 8px;
+}
+
+.editor-field span {
+  overflow: hidden;
+  color: #9a9a9a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-field input,
+.editor-field select,
+.editor-values,
+.editor-search,
+.editor-nav select {
+  user-select: text;
+}
+
+.editor-field input[type='range'] {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: #0070e0;
+}
+
+.editor-values {
+  width: calc(100% - 16px);
+  height: auto;
+  min-height: 36px;
+  margin: 0 8px 8px;
   padding: 4px 6px;
-}
-
-.scene-values {
-  margin-top: 10px;
   resize: vertical;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
 }
 
-.scene-copy {
-  margin-top: 8px;
+.editor-field input[type='number'] {
+  appearance: textfield;
+}
+
+.editor-field input[type='number']::-webkit-outer-spin-button,
+.editor-field input[type='number']::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.editor-copy {
+  height: 24px;
+  margin: 8px;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px 8px;
+}
+
+.editor-actions button {
+  height: 22px;
+  padding: 0 8px;
+}
+
+.editor-menu {
+  position: fixed;
+  z-index: 30;
+  width: 240px;
+  max-height: min(360px, 70vh);
+  background: #2a2a2a;
+  border: 1px solid #111;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.editor-menu[hidden] {
+  display: none;
+}
+
+.editor-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 10px 5px 14px;
+  border: 0;
+  background: transparent;
+  color: #e4e4e4;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-menu button:hover {
+  background: #0070e0;
+  color: #fff;
 }

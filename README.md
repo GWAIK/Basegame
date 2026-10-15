@@ -99,7 +99,9 @@ Put the image in `content/shared/backgrounds/`, then add an entry to `scenes` in
 | `characters` | Images placed on the background |
 | `dialogue` | Dialogue played when the scene opens, before `onEnter` |
 | `onEnter` | Actions run when the scene opens |
-| `triggers` | Invisible boxes. A click runs their actions |
+| `look` | `false` holds the camera still. The menu uses this |
+| `texts` | Lines drawn on the scene. They are not clickable |
+| `triggers` | Click boxes. A `label` draws a button. Without one, the box stays invisible |
 
 A path starting with `/` starts from `content/`. Shared files use that form: `/shared/backgrounds/hallway.webp`. Several levels can point at the same file. A path without `/` stays inside the level folder, for something only that level uses.
 
@@ -108,6 +110,10 @@ The `$schema` line gives autocomplete and inline errors in Cursor and VS Code.
 ### New level
 
 Add `content/levels/level-2/level.json`. Point its scenes at the files in `shared/`. The debug panel lists it on the next reload.
+
+### Menu
+
+The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with a Back button. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Change the words, positions, and sounds in that `level.json`.
 
 ### Sound and clicks
 
@@ -120,9 +126,11 @@ Add `content/levels/level-2/level.json`. Point its scenes at the files in `share
 | `{ "sound": "/shared/audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
 | `{ "dialogue": "intro" }` | Opens that dialogue and waits until it closes |
 | `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
+| `{ "level": "level-1" }` | Opens that level, then stops the list |
+| `{ "quit": true }` | Tries to close the window. If the tab stays open, a line asks the player to close it |
 | `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
 
-A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. The box is invisible. The pointer changes over it.
+A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. A `label` draws that word as a button. Without a label the box is invisible. The pointer changes over it.
 
 The boxes are drawn by one component, `Triggers`. A scene parents it and sets what a click does. The same component can be used on any scene.
 

@@ -40,6 +40,11 @@
           "default": "cover",
           "description": "cover fills the screen and crops the edges. contain shows the whole image with bars around it."
         },
+        "look": {
+          "type": "boolean",
+          "default": true,
+          "description": "False holds the camera still. Menus use this so buttons do not slide."
+        },
         "background": {
           "type": "string",
           "description": "Background image. Shared art uses /shared/backgrounds/room.webp. An animated WebP loops. Leave it out for a dark placeholder."
@@ -63,8 +68,13 @@
         },
         "triggers": {
           "type": "array",
-          "description": "Invisible boxes, in pixels of the background. A click runs their actions. The debug panel can draw them.",
+          "description": "Click boxes, in pixels of the background. A label draws a button. Without a label the box is invisible. The debug panel can draw every box.",
           "items": { "$ref": "#/definitions/trigger" }
+        },
+        "texts": {
+          "type": "array",
+          "description": "Lines of text, in pixels of the background. They are not clickable.",
+          "items": { "$ref": "#/definitions/text" }
         }
       }
     },
@@ -94,6 +104,10 @@
           "type": "string",
           "description": "Name used in tools and error messages."
         },
+        "label": {
+          "type": "string",
+          "description": "Drawn as a button. Leave it out for an invisible hotspot."
+        },
         "x": {
           "type": "number",
           "description": "Center of the rectangle, in pixels of the background."
@@ -106,7 +120,7 @@
         "height": { "type": "number", "exclusiveMinimum": 0 },
         "actions": {
           "type": "array",
-          "description": "Run in order on click. sound does not wait. dialogue waits. go opens a scene and stops the list.",
+          "description": "Run in order on click. sound does not wait. dialogue waits. go, level, and quit stop the list.",
           "items": { "$ref": "#/definitions/action" }
         }
       }
@@ -149,6 +163,29 @@
         },
         {
           "type": "object",
+          "required": ["level"],
+          "additionalProperties": false,
+          "properties": {
+            "level": {
+              "type": "string",
+              "description": "Level folder name to open, such as level-1."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["quit"],
+          "additionalProperties": false,
+          "properties": {
+            "quit": {
+              "type": "boolean",
+              "const": true,
+              "description": "Closes the window. If the browser keeps the tab, the player is asked to close it."
+            }
+          }
+        },
+        {
+          "type": "object",
           "required": ["shake"],
           "additionalProperties": false,
           "properties": {
@@ -169,6 +206,17 @@
           }
         }
       ]
+    },
+    "text": {
+      "type": "object",
+      "required": ["text", "x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "x": { "type": "number", "description": "Center of the line, in pixels of the background." },
+        "y": { "type": "number", "description": "Center of the line, in pixels of the background." },
+        "size": { "type": "number", "exclusiveMinimum": 0, "default": 32 }
+      }
     },
     "character": {
       "type": "object",

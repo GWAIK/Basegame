@@ -160,6 +160,10 @@ export class ContentLibrary {
     }
     if (action.type === 'go' && !level.scenes.some((scene) => scene.id === action.sceneId)) {
       problems.add(where, `"go" is "${action.sceneId}", which is not a scene in this level`);
+      return;
+    }
+    if (action.type === 'level' && !this.levels.some((candidate) => candidate.id === action.levelId)) {
+      problems.add(where, `level "${action.levelId}" not found in content/levels`);
     }
   }
 

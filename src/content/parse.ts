@@ -4,6 +4,7 @@ import type {
   CharacterDef,
   DialogueDef,
   DialogueLine,
+  TextDef,
   TriggerDef,
   LevelDef,
   SceneDef,
@@ -26,14 +27,27 @@ export class ContentProblems {
 type Json = Record<string, unknown>;
 
 const LEVEL_KEYS = ['$schema', 'name', 'startScene', 'scenes', 'ambience'];
-const SCENE_KEYS = ['name', 'fit', 'background', 'characters', 'dialogue', 'ambience', 'onEnter', 'triggers'];
+const SCENE_KEYS = [
+  'name',
+  'fit',
+  'look',
+  'background',
+  'characters',
+  'dialogue',
+  'ambience',
+  'onEnter',
+  'triggers',
+  'texts',
+];
 const CHARACTER_KEYS = ['image', 'x', 'y', 'scale'];
 const CUE_KEYS = ['file', 'volume'];
-const TRIGGER_KEYS = ['id', 'x', 'y', 'width', 'height', 'actions'];
+const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
+const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
 const DIALOGUE_KEYS = ['$schema', 'lines'];
 const LINE_KEYS = ['speaker', 'text', 'audio'];
-const ACTION_KINDS = ['sound', 'dialogue', 'go', 'shake'] as const;
+const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit'] as const;
+const DEFAULT_TEXT_SIZE = 32;
 const FITS: readonly SceneFit[] = ['cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
 const DEFAULT_SHAKE_MS = 300;
@@ -121,12 +135,14 @@ function parseScene(
     id,
     name: optionalString(raw, 'name', where, problems) ?? id,
     fit,
+    look: readBool(raw, 'look', true, where, problems),
     background: optionalString(raw, 'background', where, problems),
     characters,
     dialogue: optionalString(raw, 'dialogue', where, problems),
     ambience: parseCue(raw.ambience, `${where}.ambience`, problems),
     onEnter: parseActions(raw.onEnter, `${where}.onEnter`, problems),
     triggers: parseTriggers(raw.triggers, `${where}.triggers`, problems),
+    texts: parseTexts(raw.texts, `${where}.texts`, problems),
   };
 }
 
@@ -223,6 +239,12 @@ function parseAction(raw: unknown, where: string, problems: ContentProblems): Ac
   if (kind === 'go') {
     return parseGoAction(raw, where, problems);
   }
+  if (kind === 'level') {
+    return parseLevelAction(raw, where, problems);
+  }
+  if (kind === 'quit') {
+    return parseQuitAction(raw, where, problems);
+  }
   return parseShakeAction(raw, where, problems);
 }
 
@@ -251,6 +273,24 @@ function parseGoAction(raw: Json, where: string, problems: ContentProblems): Act
     return null;
   }
   return { type: 'go', sceneId };
+}
+
+function parseLevelAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['level'], where, problems);
+  const levelId = optionalString(raw, 'level', where, problems);
+  if (levelId === null) {
+    return null;
+  }
+  return { type: 'level', levelId };
+}
+
+function parseQuitAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['quit'], where, problems);
+  if (raw.quit !== true) {
+    problems.add(where, '"quit" must be true');
+    return null;
+  }
+  return { type: 'quit' };
 }
 
 function parseShakeAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
@@ -321,12 +361,57 @@ function parseTrigger(
 
   return {
     id,
+    label: optionalString(raw, 'label', where, problems),
     x,
     y,
     width,
     height,
     actions: parseActions(raw.actions, `${where}.actions`, problems),
   };
+}
+
+function parseTexts(raw: unknown, where: string, problems: ContentProblems): TextDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    problems.add(where, 'must be a list');
+    return [];
+  }
+
+  const texts: TextDef[] = [];
+  raw.forEach((item, index) => {
+    const text = parseText(item, `${where}[${index}]`, problems);
+    if (text) {
+      texts.push(text);
+    }
+  });
+  return texts;
+}
+
+function parseText(raw: unknown, where: string, problems: ContentProblems): TextDef | null {
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object');
+    return null;
+  }
+  checkKeys(raw, TEXT_KEYS, where, problems);
+
+  const text = optionalString(raw, 'text', where, problems);
+  const x = requiredNumber(raw, 'x', where, problems);
+  const y = requiredNumber(raw, 'y', where, problems);
+  if (text === null) {
+    problems.add(where, '"text" is required');
+  }
+  if (text === null || x === null || y === null) {
+    return null;
+  }
+
+  let size = DEFAULT_TEXT_SIZE;
+  if (raw.size !== undefined) {
+    size = readPositive(raw, 'size', where, problems) ?? DEFAULT_TEXT_SIZE;
+  }
+
+  return { text, x, y, size };
 }
 
 export function parseDialogue(
@@ -380,6 +465,24 @@ function checkKeys(raw: Json, allowed: readonly string[], where: string, problem
       problems.add(where, `unknown field "${key}" (allowed: ${allowed.join(', ')})`);
     }
   }
+}
+
+function readBool(
+  raw: Json,
+  key: string,
+  fallback: boolean,
+  where: string,
+  problems: ContentProblems,
+): boolean {
+  const value = raw[key];
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== 'boolean') {
+    problems.add(where, `"${key}" must be true or false`);
+    return fallback;
+  }
+  return value;
 }
 
 function optionalString(raw: Json, key: string, where: string, problems: ContentProblems): string | null {

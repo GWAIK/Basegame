@@ -19,8 +19,9 @@ interface Drag {
 }
 
 /**
- * Invisible click boxes for one scene.
+ * Click boxes for one scene.
  * Parent root to the scene, then set onActivate to what a click does.
+ * A trigger with a label draws a button. Without a label the box stays invisible.
  * With the debug panel's Show boxes on, a click selects a box instead:
  * drag the box to move it, drag a handle to resize it.
  */
@@ -29,8 +30,12 @@ export class Triggers {
   onActivate: ((trigger: TriggerDef) => void) | null = null;
 
   private readonly definitions: readonly TriggerDef[];
+  private readonly faces = new Container();
+  private readonly debugLayer = new Container();
   private selected: TriggerDef | null = null;
   private drag: Drag | null = null;
+  private hovered: string | null = null;
+  private faceKey = '';
   private shown = false;
   private drawnScale = 0;
 
@@ -38,7 +43,10 @@ export class Triggers {
     this.definitions = definitions;
     this.root.label = 'triggers';
     this.root.eventMode = 'none';
-    this.root.visible = false;
+    this.faces.label = 'buttons';
+    this.debugLayer.label = 'trigger-debug';
+    this.debugLayer.visible = false;
+    this.root.addChild(this.faces, this.debugLayer);
   }
 
   get isDragging(): boolean {
@@ -92,7 +100,9 @@ export class Triggers {
       return this.drag.cursor;
     }
     if (!this.editing) {
-      return this.bodyAt(local.x, local.y) ? 'pointer' : null;
+      const hit = this.bodyAt(local.x, local.y);
+      this.hovered = hit?.label ? hit.id : null;
+      return hit ? 'pointer' : null;
     }
     if (this.selected) {
       const handle = this.handleAt(local.x, local.y, this.selected);
@@ -121,16 +131,21 @@ export class Triggers {
   /** Call every frame after the scene has been scaled. */
   sync(sceneScale: number): void {
     const scale = sceneScale > 0 ? sceneScale : 1;
+    if (this.editing) {
+      this.hovered = null;
+    }
+    this.drawFaces(scale);
     if (!this.editing) {
       if (this.shown || this.selected) {
         this.shown = false;
-        this.root.visible = false;
+        this.debugLayer.visible = false;
+        this.debugLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
         this.drag = null;
         this.clearSelection();
       }
       return;
     }
-    this.root.visible = true;
+    this.debugLayer.visible = true;
     if (!this.shown || this.drawnScale !== scale) {
       this.shown = true;
       this.redraw(scale);
@@ -250,15 +265,31 @@ export class Triggers {
     setTriggerSelection(null);
   }
 
+  private drawFaces(sceneScale: number): void {
+    const labeled = this.definitions.filter((trigger) => trigger.label);
+    const key =
+      labeled
+        .map((trigger) => `${trigger.id}:${trigger.x}:${trigger.y}:${trigger.width}:${trigger.height}:${trigger.label}`)
+        .join('|') + `|${this.hovered ?? ''}|${sceneScale}`;
+    if (key === this.faceKey) {
+      return;
+    }
+    this.faceKey = key;
+    this.faces.removeChildren().forEach((child) => child.destroy({ children: true }));
+    for (const trigger of labeled) {
+      this.faces.addChild(drawButton(trigger, trigger.id === this.hovered));
+    }
+  }
+
   private redraw(sceneScale: number): void {
     this.drawnScale = sceneScale;
-    this.root.removeChildren().forEach((child) => child.destroy({ children: true }));
+    this.debugLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     const ordered = [
       ...this.definitions.filter((trigger) => trigger !== this.selected),
       ...(this.selected ? [this.selected] : []),
     ];
     for (const trigger of ordered) {
-      this.root.addChild(drawTrigger(trigger, trigger === this.selected, sceneScale));
+      this.debugLayer.addChild(drawTrigger(trigger, trigger === this.selected, sceneScale));
     }
   }
 }
@@ -302,6 +333,30 @@ function cursorFor(handle: Handle): string {
     return 'ns-resize';
   }
   return 'ew-resize';
+}
+
+function drawButton(trigger: TriggerDef, hovered: boolean): Container {
+  const { left, top } = edgesOf(trigger);
+  const box = new Graphics();
+  box
+    .roundRect(left, top, trigger.width, trigger.height, 2)
+    .fill({ color: hovered ? 0x1c202a : 0x0c0e14, alpha: hovered ? 0.92 : 0.78 })
+    .stroke({ color: 0xf4f1ea, width: 2, alpha: hovered ? 0.7 : 0.28 });
+
+  const label = new Text({
+    text: trigger.label ?? '',
+    anchor: 0.5,
+    style: {
+      fill: '#f4f1ea',
+      fontFamily: 'Georgia, "Times New Roman", serif',
+      fontSize: Math.max(18, Math.min(36, trigger.height * 0.42)),
+    },
+  });
+  label.position.set(trigger.x, trigger.y);
+
+  const root = new Container();
+  root.addChild(box, label);
+  return root;
 }
 
 function drawTrigger(trigger: TriggerDef, selected: boolean, sceneScale: number): Container {

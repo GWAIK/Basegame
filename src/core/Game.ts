@@ -67,7 +67,7 @@ export class Game {
     this.app.renderer.on('resize', () => this.handleResize());
     this.bindInput();
 
-    const level = this.content.firstLevel;
+    const level = this.content.level('menu') ?? this.content.firstLevel;
     if (level) {
       await this.goTo(level.id);
     }
@@ -110,6 +110,7 @@ export class Game {
     }
 
     this.scene = next;
+    this.camera.setLocked(!definition.look);
     this.currentLocation = { levelId: level.id, sceneId: definition.id };
     this.app.canvas.style.cursor = '';
     this.world.addChild(next.root);
@@ -223,11 +224,24 @@ export class Game {
         await this.playDialogueAndWait(action.id);
       } else if (action.type === 'shake') {
         this.shakeCamera(action.intensity, action.durationMs);
-      } else {
+      } else if (action.type === 'go') {
         await this.goTo(level.id, action.sceneId);
+        return;
+      } else if (action.type === 'level') {
+        await this.goTo(action.levelId);
+        return;
+      } else {
+        window.close();
+        await this.showNotice('Close this tab to leave.');
         return;
       }
     }
+  }
+
+  private showNotice(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.dialogue.start([{ speaker: '', text, audio: null }], () => resolve());
+    });
   }
 
   private playDialogueAndWait(dialogueId: string): Promise<void> {

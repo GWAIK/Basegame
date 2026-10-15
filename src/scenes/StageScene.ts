@@ -1,9 +1,9 @@
-import { Graphics, Sprite, type Container } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { AnimatedWebp } from '../animation/AnimatedWebp';
 import type { AssetLoader, LoadedImage } from '../assets/AssetLoader';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { CharacterDef, LevelDef, SceneDef, TriggerDef } from '../content/types';
+import type { CharacterDef, LevelDef, SceneDef, TextDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
 import { Triggers } from '../triggers/Triggers';
 import { fitScene } from './fitScene';
@@ -53,6 +53,7 @@ export class StageScene extends Scene {
     this.definition.characters.forEach((character, index) => {
       this.addCharacter(character, characterImages[index]);
     });
+    this.addTexts();
     this.layout();
   }
 
@@ -119,6 +120,18 @@ export class StageScene extends Scene {
     this.backgroundLayer.addChild(new Sprite(image.texture));
   }
 
+  private addTexts(): void {
+    if (this.definition.texts.length === 0) {
+      return;
+    }
+    const layer = new Container();
+    layer.label = 'texts';
+    for (const item of this.definition.texts) {
+      layer.addChild(createSceneText(item));
+    }
+    this.foregroundLayer.addChildAt(layer, 0);
+  }
+
   private addCharacter(character: CharacterDef, image: LoadedImage | null): void {
     const display: Container = image ? new Sprite(image.texture) : createCharacterPlaceholder();
     if (display instanceof Sprite) {
@@ -144,12 +157,25 @@ export class StageScene extends Scene {
 }
 
 function createBackgroundPlaceholder(): Graphics {
-  const horizon = Math.round(PLACEHOLDER_HEIGHT * 0.58);
   const placeholder = new Graphics();
   placeholder.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(0x10131a);
-  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT - horizon).fill(0x1a1e28);
-  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, 2).fill({ color: 0xffffff, alpha: 0.08 });
   return placeholder;
+}
+
+function createSceneText(item: TextDef): Text {
+  const text = new Text({
+    text: item.text,
+    anchor: 0.5,
+    style: {
+      fill: '#f4f1ea',
+      fontFamily: 'Georgia, "Times New Roman", serif',
+      fontSize: item.size,
+      align: 'center',
+      letterSpacing: item.size >= 48 ? 6 : 0.4,
+    },
+  });
+  text.position.set(item.x, item.y);
+  return text;
 }
 
 function createCharacterPlaceholder(): Graphics {

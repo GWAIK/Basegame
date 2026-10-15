@@ -1,7 +1,11 @@
 import type {
+  ActionDef,
+  AudioCue,
   CharacterDef,
   DialogueDef,
   DialogueLine,
+  TextDef,
+  TriggerDef,
   LevelDef,
   SceneDef,
   SceneFit,
@@ -22,12 +26,31 @@ export class ContentProblems {
 
 type Json = Record<string, unknown>;
 
-const LEVEL_KEYS = ['$schema', 'name', 'startScene', 'scenes'];
-const SCENE_KEYS = ['name', 'fit', 'background', 'characters', 'dialogue'];
+const LEVEL_KEYS = ['$schema', 'name', 'startScene', 'scenes', 'ambience'];
+const SCENE_KEYS = [
+  'name',
+  'fit',
+  'look',
+  'background',
+  'characters',
+  'dialogue',
+  'ambience',
+  'onEnter',
+  'triggers',
+  'texts',
+];
 const CHARACTER_KEYS = ['image', 'x', 'y', 'scale'];
+const CUE_KEYS = ['file', 'volume'];
+const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
+const TEXT_KEYS = ['text', 'x', 'y', 'size'];
+const SHAKE_KEYS = ['intensity', 'duration'];
 const DIALOGUE_KEYS = ['$schema', 'lines'];
-const LINE_KEYS = ['speaker', 'text'];
+const LINE_KEYS = ['speaker', 'text', 'audio'];
+const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit'] as const;
+const DEFAULT_TEXT_SIZE = 32;
 const FITS: readonly SceneFit[] = ['cover', 'contain'];
+const DEFAULT_SHAKE_INTENSITY = 10;
+const DEFAULT_SHAKE_MS = 300;
 
 export function parseLevel(
   id: string,
@@ -68,6 +91,7 @@ export function parseLevel(
     id,
     name: optionalString(raw, 'name', file, problems) ?? id,
     startScene,
+    ambience: parseCue(raw.ambience, `${file} → ambience`, problems),
     scenes,
   };
 }
@@ -111,9 +135,14 @@ function parseScene(
     id,
     name: optionalString(raw, 'name', where, problems) ?? id,
     fit,
+    look: readBool(raw, 'look', true, where, problems),
     background: optionalString(raw, 'background', where, problems),
     characters,
     dialogue: optionalString(raw, 'dialogue', where, problems),
+    ambience: parseCue(raw.ambience, `${where}.ambience`, problems),
+    onEnter: parseActions(raw.onEnter, `${where}.onEnter`, problems),
+    triggers: parseTriggers(raw.triggers, `${where}.triggers`, problems),
+    texts: parseTexts(raw.texts, `${where}.texts`, problems),
   };
 }
 
@@ -150,6 +179,241 @@ function parseCharacter(
   return { image, x, y, scale };
 }
 
+/** Absent cue stays null. A present cue that cannot be read stays null too. */
+function parseCue(raw: unknown, where: string, problems: ContentProblems): AudioCue | null {
+  if (raw === undefined) {
+    return null;
+  }
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object with "file"');
+    return null;
+  }
+  checkKeys(raw, CUE_KEYS, where, problems);
+
+  const file = optionalString(raw, 'file', where, problems);
+  if (file === null) {
+    problems.add(where, '"file" is required');
+    return null;
+  }
+  return { file, volume: readVolume(raw, where, problems) };
+}
+
+function parseActions(raw: unknown, where: string, problems: ContentProblems): ActionDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    problems.add(where, 'must be a list');
+    return [];
+  }
+
+  const actions: ActionDef[] = [];
+  raw.forEach((item, index) => {
+    const action = parseAction(item, `${where}[${index}]`, problems);
+    if (action) {
+      actions.push(action);
+    }
+  });
+  return actions;
+}
+
+function parseAction(raw: unknown, where: string, problems: ContentProblems): ActionDef | null {
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object');
+    return null;
+  }
+
+  const kinds = ACTION_KINDS.filter((kind) => raw[kind] !== undefined);
+  if (kinds.length !== 1) {
+    problems.add(where, `needs exactly one of ${ACTION_KINDS.map((kind) => `"${kind}"`).join(', ')}`);
+    return null;
+  }
+
+  const kind = kinds[0];
+  if (kind === 'sound') {
+    return parseSoundAction(raw, where, problems);
+  }
+  if (kind === 'dialogue') {
+    return parseDialogueAction(raw, where, problems);
+  }
+  if (kind === 'go') {
+    return parseGoAction(raw, where, problems);
+  }
+  if (kind === 'level') {
+    return parseLevelAction(raw, where, problems);
+  }
+  if (kind === 'quit') {
+    return parseQuitAction(raw, where, problems);
+  }
+  return parseShakeAction(raw, where, problems);
+}
+
+function parseSoundAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['sound', 'volume'], where, problems);
+  const file = optionalString(raw, 'sound', where, problems);
+  if (file === null) {
+    return null;
+  }
+  return { type: 'sound', file, volume: readVolume(raw, where, problems) };
+}
+
+function parseDialogueAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['dialogue'], where, problems);
+  const id = optionalString(raw, 'dialogue', where, problems);
+  if (id === null) {
+    return null;
+  }
+  return { type: 'dialogue', id };
+}
+
+function parseGoAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['go'], where, problems);
+  const sceneId = optionalString(raw, 'go', where, problems);
+  if (sceneId === null) {
+    return null;
+  }
+  return { type: 'go', sceneId };
+}
+
+function parseLevelAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['level'], where, problems);
+  const levelId = optionalString(raw, 'level', where, problems);
+  if (levelId === null) {
+    return null;
+  }
+  return { type: 'level', levelId };
+}
+
+function parseQuitAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['quit'], where, problems);
+  if (raw.quit !== true) {
+    problems.add(where, '"quit" must be true');
+    return null;
+  }
+  return { type: 'quit' };
+}
+
+function parseShakeAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['shake'], where, problems);
+  const shake = raw.shake;
+  if (shake === true) {
+    return { type: 'shake', intensity: DEFAULT_SHAKE_INTENSITY, durationMs: DEFAULT_SHAKE_MS };
+  }
+  if (!isObject(shake)) {
+    problems.add(where, '"shake" must be true, or an object with "intensity" and "duration"');
+    return null;
+  }
+
+  checkKeys(shake, SHAKE_KEYS, where, problems);
+  return {
+    type: 'shake',
+    intensity: readNonNegative(shake, 'intensity', DEFAULT_SHAKE_INTENSITY, where, problems),
+    durationMs: readNonNegative(shake, 'duration', DEFAULT_SHAKE_MS, where, problems),
+  };
+}
+
+function parseTriggers(raw: unknown, where: string, problems: ContentProblems): TriggerDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    problems.add(where, 'must be a list');
+    return [];
+  }
+
+  const triggers: TriggerDef[] = [];
+  raw.forEach((item, index) => {
+    const trigger = parseTrigger(item, `${where}[${index}]`, index, problems);
+    if (trigger) {
+      triggers.push(trigger);
+    }
+  });
+  return triggers;
+}
+
+function parseTrigger(
+  raw: unknown,
+  where: string,
+  index: number,
+  problems: ContentProblems,
+): TriggerDef | null {
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object');
+    return null;
+  }
+  checkKeys(raw, TRIGGER_KEYS, where, problems);
+
+  const x = requiredNumber(raw, 'x', where, problems);
+  const y = requiredNumber(raw, 'y', where, problems);
+  const width = readPositive(raw, 'width', where, problems);
+  const height = readPositive(raw, 'height', where, problems);
+  if (x === null || y === null || width === null || height === null) {
+    return null;
+  }
+
+  const id = optionalString(raw, 'id', where, problems) ?? `trigger-${index}`;
+  if (raw.id === undefined) {
+    problems.add(where, '"id" is required');
+  }
+  if (raw.actions === undefined) {
+    problems.add(where, '"actions" is required');
+  }
+
+  return {
+    id,
+    label: optionalString(raw, 'label', where, problems),
+    x,
+    y,
+    width,
+    height,
+    actions: parseActions(raw.actions, `${where}.actions`, problems),
+  };
+}
+
+function parseTexts(raw: unknown, where: string, problems: ContentProblems): TextDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    problems.add(where, 'must be a list');
+    return [];
+  }
+
+  const texts: TextDef[] = [];
+  raw.forEach((item, index) => {
+    const text = parseText(item, `${where}[${index}]`, problems);
+    if (text) {
+      texts.push(text);
+    }
+  });
+  return texts;
+}
+
+function parseText(raw: unknown, where: string, problems: ContentProblems): TextDef | null {
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object');
+    return null;
+  }
+  checkKeys(raw, TEXT_KEYS, where, problems);
+
+  const text = optionalString(raw, 'text', where, problems);
+  const x = requiredNumber(raw, 'x', where, problems);
+  const y = requiredNumber(raw, 'y', where, problems);
+  if (text === null) {
+    problems.add(where, '"text" is required');
+  }
+  if (text === null || x === null || y === null) {
+    return null;
+  }
+
+  let size = DEFAULT_TEXT_SIZE;
+  if (raw.size !== undefined) {
+    size = readPositive(raw, 'size', where, problems) ?? DEFAULT_TEXT_SIZE;
+  }
+
+  return { text, x, y, size };
+}
+
 export function parseDialogue(
   id: string,
   file: string,
@@ -180,7 +444,11 @@ export function parseDialogue(
       problems.add(where, '"text" is required');
       return;
     }
-    lines.push({ speaker: optionalString(rawLine, 'speaker', where, problems) ?? '', text });
+    lines.push({
+      speaker: optionalString(rawLine, 'speaker', where, problems) ?? '',
+      text,
+      audio: optionalString(rawLine, 'audio', where, problems),
+    });
   });
 
   return lines.length > 0 ? { id, lines } : null;
@@ -197,6 +465,24 @@ function checkKeys(raw: Json, allowed: readonly string[], where: string, problem
       problems.add(where, `unknown field "${key}" (allowed: ${allowed.join(', ')})`);
     }
   }
+}
+
+function readBool(
+  raw: Json,
+  key: string,
+  fallback: boolean,
+  where: string,
+  problems: ContentProblems,
+): boolean {
+  const value = raw[key];
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== 'boolean') {
+    problems.add(where, `"${key}" must be true or false`);
+    return fallback;
+  }
+  return value;
 }
 
 function optionalString(raw: Json, key: string, where: string, problems: ContentProblems): string | null {
@@ -216,6 +502,51 @@ function requiredNumber(raw: Json, key: string, where: string, problems: Content
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     problems.add(where, `"${key}" must be a number`);
     return null;
+  }
+  return value;
+}
+
+/** Missing volume is 1. An invalid volume is reported and replaced with 1. */
+function readVolume(raw: Json, where: string, problems: ContentProblems): number {
+  if (raw.volume === undefined) {
+    return 1;
+  }
+  if (typeof raw.volume !== 'number' || raw.volume < 0 || raw.volume > 1) {
+    problems.add(where, '"volume" must be a number from 0 to 1');
+    return 1;
+  }
+  return raw.volume;
+}
+
+function readPositive(raw: Json, key: string, where: string, problems: ContentProblems): number | null {
+  const value = requiredNumber(raw, key, where, problems);
+  if (value === null) {
+    return null;
+  }
+  if (value <= 0) {
+    problems.add(where, `"${key}" must be above 0`);
+    return null;
+  }
+  return value;
+}
+
+function readNonNegative(
+  raw: Json,
+  key: string,
+  fallback: number,
+  where: string,
+  problems: ContentProblems,
+): number {
+  if (raw[key] === undefined) {
+    return fallback;
+  }
+  const value = requiredNumber(raw, key, where, problems);
+  if (value === null) {
+    return fallback;
+  }
+  if (value < 0) {
+    problems.add(where, `"${key}" must be 0 or above`);
+    return fallback;
   }
   return value;
 }

@@ -1,6 +1,7 @@
 import GUI, { type Controller } from 'lil-gui';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { Game } from '../core/Game';
+import { onTriggerSelection, triggerDebug, triggerSnippet } from './triggerDebug';
 
 /**
  * Floating debug panel. Only created in development.
@@ -14,6 +15,8 @@ export function createDebugPanel(game: Game): GUI {
   addNavigation(gui, game);
   addDialogues(gui, game);
   addEvents(gui, game);
+  addTriggers(gui);
+  addAudio(gui, game);
   addCamera(gui, game);
   bindToggle(gui);
 
@@ -39,6 +42,7 @@ function addNavigation(gui: GUI, game: Game): void {
   });
 
   let sceneController: Controller | null = null;
+  let shownLevel = state.level;
   const rebuildScenes = () => {
     sceneController?.destroy();
     const level = game.content.level(state.level);
@@ -55,15 +59,15 @@ function addNavigation(gui: GUI, game: Game): void {
   rebuildScenes();
 
   game.events.on('scene:enter', ({ levelId, sceneId }) => {
-    const levelChanged = state.level !== levelId;
     state.level = levelId;
     state.scene = sceneId;
     levelController.updateDisplay();
-    if (levelChanged) {
+    if (shownLevel !== levelId) {
+      shownLevel = levelId;
       rebuildScenes();
-    } else {
-      sceneController?.updateDisplay();
+      return;
     }
+    sceneController?.updateDisplay();
   });
 }
 
@@ -78,6 +82,50 @@ function addDialogues(gui: GUI, game: Game): void {
 function addEvents(gui: GUI, game: Game): void {
   const folder = gui.addFolder('Events');
   folder.add({ run: () => run(() => game.shakeCamera()) }, 'run').name('Camera shake');
+}
+
+function addTriggers(gui: GUI): void {
+  const folder = gui.addFolder('Triggers');
+  folder.add(triggerDebug, 'visible').name('Show boxes');
+
+  const state = { values: 'Click a box', copy: () => undefined };
+  const values = folder.add(state, 'values').name('Values');
+  const copy = folder.add(state, 'copy').name('Copy values');
+  copy.onChange(() => {
+    const snippet = triggerSnippet(triggerDebug.selected);
+    if (!snippet) {
+      return;
+    }
+    const input = values.domElement.querySelector('input');
+    void navigator.clipboard.writeText(snippet).then(
+      () => {
+        copy.name('Copied');
+        window.setTimeout(() => copy.name('Copy values'), 1200);
+      },
+      () => {
+        input?.focus();
+        input?.select();
+        copy.name('Select the line');
+        window.setTimeout(() => copy.name('Copy values'), 1600);
+      },
+    );
+  });
+
+  const refresh = () => {
+    const snippet = triggerSnippet(triggerDebug.selected);
+    state.values = snippet || 'Click a box';
+    values.updateDisplay();
+  };
+  onTriggerSelection(refresh);
+  folder.open();
+}
+
+function addAudio(gui: GUI, game: Game): void {
+  const folder = gui.addFolder('Audio');
+  const state = { volume: 1 };
+  folder.add(state, 'volume', 0, 1, 0.01).name('Master').onChange((volume: number) => {
+    game.setMasterVolume(volume);
+  });
 }
 
 function addCamera(gui: GUI, game: Game): void {

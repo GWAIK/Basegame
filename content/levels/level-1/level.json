@@ -2,18 +2,38 @@
   "$schema": "../../schemas/level.schema.json",
   "name": "Level 1",
   "startScene": "hana",
+  "ambience": { "file": "/shared/audio/ambience.wav", "volume": 0.7 },
   "scenes": {
     "hana": {
       "name": "Hana",
       "fit": "contain",
-      "background": "backgrounds/hana.webp"
+      "background": "/shared/backgrounds/hana.webp",
+      "onEnter": [
+        { "sound": "/shared/audio/arrive.wav", "volume": 0.8 }
+      ]
     },
     "test": {
       "name": "Test",
       "fit": "cover",
-      "background": "backgrounds/BG1_test.webp",
+      "background": "/shared/backgrounds/BG1_test.webp",
+      "ambience": { "file": "/shared/audio/room.wav", "volume": 0.65 },
       "characters": [
-        { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+        { "image": "/shared/characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+      ],
+      "triggers": [
+        {
+          "id": "ticket",
+          "x": 640,
+          "y": 300,
+          "width": 864,
+          "height": 486,
+          "actions": [
+            { "sound": "/shared/audio/click.wav" },
+            { "dialogue": "intro" },
+            { "shake": { "intensity": 8, "duration": 280 } },
+            { "go": "hana" }
+          ]
+        }
       ]
     }
   }

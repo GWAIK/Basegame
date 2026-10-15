@@ -29,25 +29,26 @@ npm run preview   # serves dist/ locally
 
 ```text
 content/
+  shared/                 art and sound used by more than one level
+    backgrounds/
+    characters/
+    audio/
   levels/
     level-1/
-      level.json          scenes of this level
-      backgrounds/        scene images
-      characters/         character images
-      foreground/         foreground art
+      level.json          scenes, ambience, and interactions
   dialogues/
     intro.json            one file per dialogue
-  ui/                     shared interface art
+  ui/                     interface art
   schemas/                editor autocomplete for the JSON files
 ```
 
-Everything here is found automatically. A new level folder, dialogue file, or image needs no code change.
+Everything here is found automatically. A new level is a folder with a `level.json`. No code change, and nothing to register. Pictures and sounds go in `shared/` when another level uses them too.
 
-Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files (MP3, OGG, WAV, M4A) are already packaged, ready for an audio feature.
+Images can be PNG, JPG, or WEBP. An animated WebP loops by itself at the timing stored in the file, including in Safari. Sound files can be MP3, OGG, WAV, or M4A.
 
 ### Add a scene
 
-Put the image in the level's `backgrounds/` folder, then add an entry to `scenes` in `level.json`:
+Put the image in `content/shared/backgrounds/`, then add an entry to `scenes` in `level.json`:
 
 ```json
 {
@@ -58,16 +59,31 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
     "hana": {
       "name": "Hana",
       "fit": "contain",
-      "background": "backgrounds/hana.webp"
+      "background": "/shared/backgrounds/hana.webp"
     },
     "test": {
       "name": "Test",
       "fit": "cover",
-      "background": "backgrounds/BG1_test.webp",
+      "background": "/shared/backgrounds/BG1_test.webp",
+      "ambience": { "file": "/shared/audio/room.wav", "volume": 0.65 },
       "characters": [
-        { "image": "characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
+        { "image": "/shared/characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
       ],
-      "dialogue": "intro"
+      "triggers": [
+        {
+          "id": "ticket",
+          "x": 640,
+          "y": 300,
+          "width": 864,
+          "height": 486,
+          "actions": [
+            { "sound": "/shared/audio/click.wav" },
+            { "dialogue": "intro" },
+            { "shake": { "intensity": 8, "duration": 280 } },
+            { "go": "hana" }
+          ]
+        }
+      ]
     }
   }
 }
@@ -77,14 +93,50 @@ Put the image in the level's `backgrounds/` folder, then add an entry to `scenes
 | --- | --- |
 | `startScene` | Scene opened when the level starts. Defaults to the first one |
 | `name` | Label in the debug panel |
+| `ambience` | Looping background sound. On a scene, it replaces the level's ambience |
 | `fit` | `cover` fills the screen and crops the edges. `contain` shows the whole image, with bars around it |
 | `background` | Image path. Leave it out for a dark placeholder |
 | `characters` | Images placed on the background |
-| `dialogue` | Dialogue played when the scene opens |
+| `dialogue` | Dialogue played when the scene opens, before `onEnter` |
+| `onEnter` | Actions run when the scene opens |
+| `look` | `false` holds the camera still. The menu uses this |
+| `texts` | Lines drawn on the scene. They are not clickable |
+| `triggers` | Click boxes. A `label` draws a button. Without one, the box stays invisible |
 
-Paths are relative to the level folder. A path starting with `/` starts from `content/`, for shared art: `/ui/frame.png`.
+A path starting with `/` starts from `content/`. Shared files use that form: `/shared/backgrounds/hallway.webp`. Several levels can point at the same file. A path without `/` stays inside the level folder, for something only that level uses.
 
 The `$schema` line gives autocomplete and inline errors in Cursor and VS Code.
+
+### New level
+
+Add `content/levels/level-2/level.json`. Point its scenes at the files in `shared/`. The debug panel lists it on the next reload.
+
+### Menu
+
+The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with a Back button. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Change the words, positions, and sounds in that `level.json`.
+
+### Sound and clicks
+
+`ambience` on the level loops under every scene. A scene with its own `ambience` replaces it until the player leaves. `volume` goes from 0 to 1.
+
+`onEnter` and each trigger `actions` list run in order:
+
+| Action | Effect |
+| --- | --- |
+| `{ "sound": "/shared/audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
+| `{ "dialogue": "intro" }` | Opens that dialogue and waits until it closes |
+| `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
+| `{ "level": "level-1" }` | Opens that level, then stops the list |
+| `{ "quit": true }` | Tries to close the window. If the tab stays open, a line asks the player to close it |
+| `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
+
+A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. A `label` draws that word as a button. Without a label the box is invisible. The pointer changes over it.
+
+The boxes are drawn by one component, `Triggers`. A scene parents it and sets what a click does. The same component can be used on any scene.
+
+In development, Triggers → Show boxes draws every box. Click one to select it: drag the box to move it, drag a white handle to resize it. Values shows `id`, `x`, `y`, `width`, and `height`. Copy values puts that line on the clipboard so it can replace the trigger in `level.json`. While the boxes are shown, a click edits instead of running the action. The checkbox is not included in a build.
+
+The browser stays silent until the first click or key press. The ambience and any sound requested before that start on that gesture. The debug panel has a Master slider for the whole mix.
 
 ### Place a character
 
@@ -101,12 +153,12 @@ One file per dialogue in `content/dialogues/`. The file name is the id, so `intr
   "$schema": "../schemas/dialogue.schema.json",
   "lines": [
     { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
-    { "speaker": "Unknown", "text": "Are you still there?" }
+    { "speaker": "Unknown", "text": "Are you still there?", "audio": "shared/audio/whisper.wav" }
   ]
 }
 ```
 
-Leave `speaker` out for narration. Click, Space, or Enter advances. Escape closes.
+Leave `speaker` out for narration. `audio` is a path from `content/`, played when that line appears. Click, Space, or Enter advances. Escape closes.
 
 ### When something is wrong
 
@@ -117,6 +169,10 @@ File names are case-sensitive on itch.io. `Hana.webp` and `hana.webp` are differ
 ## Debug panel
 
 In development, a panel on the right lists every level, scene, and dialogue found in `content/`, plus camera tuning and test events. Press H to hide or show it. It is not included in a build.
+
+### Scene
+
+The Scene button, on the left, lists what the current scene draws: the background, characters, texts, and triggers. It is separate from the debug panel. Click a name, or click the asset on the picture, to select it. Drag it to move it. A character's corner handle changes its scale. A trigger's handles change its box. Hide takes it off the picture while you work; Close shows everything again. Copy values, then paste that line into `level.json`. A reload reads the file again, so a move is kept only after it is pasted. The Scene button is not included in a build.
 
 ## Engine
 
@@ -129,14 +185,17 @@ src/
   core/GameEvents.ts           the list of game events
   content/ContentLibrary.ts    finds and checks everything in content/
   content/parse.ts             reads level and dialogue JSON
-  content/types.ts             level, scene, and dialogue types
+  content/types.ts             level, scene, dialogue, and action types
+  audio/AudioPlayer.ts         looping ambience and overlapping effects
+  triggers/Triggers.ts         click boxes, debug gizmos
   scenes/StageScene.ts         draws a scene from level.json
   scenes/fitScene.ts           cover and contain scaling
   assets/AssetLoader.ts        images and animated WebP
   animation/AnimatedWebp.ts    frame-by-frame WebP playback
   camera/                      mouse look, shake, headbob, tuning
   dialogue/                    dialogue box and sequencing
-  debug/                       debug panel and content problem list
+  debug/                       debug panel, trigger boxes, and content problem list
+  editor/                      scene list, selection, and move handles
 ```
 
 ```text
@@ -167,7 +226,7 @@ Features listen to the game instead of being wired into it:
 
 ```ts
 game.events.on('scene:enter', ({ levelId, sceneId }) => {
-  // start ambience for this scene
+  // react when a scene opens
 });
 game.events.on('dialogue:end', ({ dialogueId }) => {
   // unlock the next step

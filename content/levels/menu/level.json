@@ -1,0 +1,77 @@
+{
+  "$schema": "../../schemas/level.schema.json",
+  "name": "Menu",
+  "startScene": "main",
+  "ambience": { "file": "/shared/audio/ambience.wav", "volume": 0.4 },
+  "scenes": {
+    "main": {
+      "name": "Main",
+      "fit": "cover",
+      "look": false,
+      "texts": [
+        { "text": "CACOPHOBIA", "x": 960, "y": 320, "size": 72 }
+      ],
+      "triggers": [
+        {
+          "id": "play",
+          "label": "Play",
+          "x": 960,
+          "y": 560,
+          "width": 460,
+          "height": 72,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "level": "level-1" }
+          ]
+        },
+        {
+          "id": "settings",
+          "label": "Settings",
+          "x": 960,
+          "y": 660,
+          "width": 460,
+          "height": 72,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "go": "settings" }
+          ]
+        },
+        {
+          "id": "quit",
+          "label": "Quit",
+          "x": 960,
+          "y": 760,
+          "width": 460,
+          "height": 72,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "quit": true }
+          ]
+        }
+      ]
+    },
+    "settings": {
+      "name": "Settings",
+      "fit": "cover",
+      "look": false,
+      "texts": [
+        { "text": "Settings", "x": 960, "y": 380, "size": 56 },
+        { "text": "Settings will be available later.", "x": 960, "y": 480, "size": 28 }
+      ],
+      "triggers": [
+        {
+          "id": "back",
+          "label": "Back",
+          "x": 960,
+          "y": 640,
+          "width": 460,
+          "height": 72,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "go": "main" }
+          ]
+        }
+      ]
+    }
+  }
+}

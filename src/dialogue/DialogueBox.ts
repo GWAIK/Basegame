@@ -75,8 +75,10 @@ export class DialogueBox {
     const width = Math.min(MAX_WIDTH, Math.max(280, this.viewWidth - MARGIN * 2));
     this.body.style.wordWrapWidth = width - PADDING * 2;
 
+    const hasSpeaker = this.speaker.text.trim().length > 0;
+    this.speaker.visible = hasSpeaker;
     const speakerY = PADDING;
-    const bodyY = speakerY + this.speaker.height + 8;
+    const bodyY = hasSpeaker ? speakerY + this.speaker.height + 8 : PADDING;
     const hintY = bodyY + this.body.height + 14;
     const height = hintY + this.hint.height + PADDING;
     const x = (this.viewWidth - width) / 2;

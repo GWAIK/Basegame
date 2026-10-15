@@ -1,10 +1,12 @@
-import { Graphics, Sprite, type Container } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { AnimatedWebp } from '../animation/AnimatedWebp';
 import type { AssetLoader, LoadedImage } from '../assets/AssetLoader';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { CharacterDef, LevelDef, SceneDef } from '../content/types';
+import type { CharacterDef, LevelDef, SceneDef, TextDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
+import { SceneHandles } from '../editor/SceneHandles';
+import { Triggers } from '../triggers/Triggers';
 import { fitScene } from './fitScene';
 
 const PLACEHOLDER_WIDTH = 1920;
@@ -19,6 +21,10 @@ export class StageScene extends Scene {
   private readonly animations: AnimatedWebp[] = [];
   private sceneWidth = PLACEHOLDER_WIDTH;
   private sceneHeight = PLACEHOLDER_HEIGHT;
+  private readonly triggers: Triggers;
+  private readonly characterViews: Container[] = [];
+  private readonly textViews: Text[] = [];
+  private readonly handles: SceneHandles | null;
 
   constructor(
     readonly level: LevelDef,
@@ -28,6 +34,27 @@ export class StageScene extends Scene {
   ) {
     super();
     this.root.label = `scene:${level.id}/${definition.id}`;
+    this.triggers = new Triggers(definition.triggers);
+    this.foregroundLayer.addChild(this.triggers.root);
+    this.handles = import.meta.env.DEV
+      ? new SceneHandles({
+          scene: definition,
+          root: this.root,
+          background: this.backgroundLayer,
+          characters: this.characterViews,
+          texts: this.textViews,
+          triggers: this.triggers,
+          sceneSize: () => ({ width: this.sceneWidth, height: this.sceneHeight }),
+        })
+      : null;
+    if (this.handles) {
+      this.foregroundLayer.addChild(this.handles.overlay);
+    }
+  }
+
+  /** What a trigger click does. The box itself lives in Triggers. */
+  setTriggerHandler(handler: (trigger: TriggerDef) => void): void {
+    this.triggers.onActivate = handler;
   }
 
   async load(): Promise<void> {
@@ -44,6 +71,7 @@ export class StageScene extends Scene {
     this.definition.characters.forEach((character, index) => {
       this.addCharacter(character, characterImages[index]);
     });
+    this.addTexts();
     this.layout();
   }
 
@@ -53,9 +81,39 @@ export class StageScene extends Scene {
       animation.update(deltaMS);
     }
     this.layout();
+    this.handles?.sync(this.root.scale.x);
+    this.triggers.sync(this.root.scale.x);
+  }
+
+  override onPointerDown(x: number, y: number): void {
+    if (this.handles?.active) {
+      this.handles.pointerDown(x, y);
+      return;
+    }
+    this.triggers.pointerDown(x, y);
+  }
+
+  override onPointerMove(x: number, y: number): string | null {
+    if (this.handles?.active) {
+      return this.handles.pointerMove(x, y);
+    }
+    return this.triggers.pointerMove(x, y);
+  }
+
+  override onPointerUp(): void {
+    if (this.handles?.active) {
+      this.handles.pointerUp();
+      return;
+    }
+    this.triggers.pointerUp();
+  }
+
+  override isCapturingPointer(): boolean {
+    return this.handles?.isDragging === true || this.triggers.isDragging;
   }
 
   override destroy(): void {
+    this.triggers.dispose();
     super.destroy();
     for (const animation of this.animations) {
       animation.destroy();
@@ -92,6 +150,20 @@ export class StageScene extends Scene {
     this.backgroundLayer.addChild(new Sprite(image.texture));
   }
 
+  private addTexts(): void {
+    if (this.definition.texts.length === 0) {
+      return;
+    }
+    const layer = new Container();
+    layer.label = 'texts';
+    for (const item of this.definition.texts) {
+      const text = createSceneText(item);
+      this.textViews.push(text);
+      layer.addChild(text);
+    }
+    this.foregroundLayer.addChildAt(layer, 0);
+  }
+
   private addCharacter(character: CharacterDef, image: LoadedImage | null): void {
     const display: Container = image ? new Sprite(image.texture) : createCharacterPlaceholder();
     if (display instanceof Sprite) {
@@ -99,6 +171,7 @@ export class StageScene extends Scene {
     }
     display.scale.set(character.scale);
     display.position.set(character.x, character.y);
+    this.characterViews.push(display);
     this.characterLayer.addChild(display);
   }
 
@@ -117,12 +190,25 @@ export class StageScene extends Scene {
 }
 
 function createBackgroundPlaceholder(): Graphics {
-  const horizon = Math.round(PLACEHOLDER_HEIGHT * 0.58);
   const placeholder = new Graphics();
   placeholder.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(0x10131a);
-  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT - horizon).fill(0x1a1e28);
-  placeholder.rect(0, horizon, PLACEHOLDER_WIDTH, 2).fill({ color: 0xffffff, alpha: 0.08 });
   return placeholder;
+}
+
+function createSceneText(item: TextDef): Text {
+  const text = new Text({
+    text: item.text,
+    anchor: 0.5,
+    style: {
+      fill: '#f4f1ea',
+      fontFamily: 'Georgia, "Times New Roman", serif',
+      fontSize: item.size,
+      align: 'center',
+      letterSpacing: item.size >= 48 ? 6 : 0.4,
+    },
+  });
+  text.position.set(item.x, item.y);
+  return text;
 }
 
 function createCharacterPlaceholder(): Graphics {

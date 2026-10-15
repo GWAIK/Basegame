@@ -27,6 +27,7 @@ export class Camera {
   private viewHeight = 1;
   private hasPointer = false;
   private suppressLook = false;
+  private locked = false;
 
   constructor(
     private readonly world: Container,
@@ -54,6 +55,10 @@ export class Camera {
     this.pointerX = x;
     this.pointerY = y;
 
+    if (this.locked) {
+      return;
+    }
+
     if (this.suppressLook) {
       if (this.hasPointer && Math.hypot(dx, dy) < 2) {
         return;
@@ -69,6 +74,20 @@ export class Camera {
     this.cameraShake.shake(intensity, durationMs);
   }
 
+  /** Menus use this so buttons do not slide under the pointer. */
+  setLocked(locked: boolean): void {
+    this.locked = locked;
+    if (!locked) {
+      return;
+    }
+    this.targetMouseX = 0;
+    this.targetMouseY = 0;
+    this.mouseOffsetX = 0;
+    this.mouseOffsetY = 0;
+    this.cameraShake.stop();
+    this.world.position.set(-this.baseX, -this.baseY);
+  }
+
   /** Clears shake and returns the look offset to center until the mouse moves. */
   reset(): void {
     this.targetMouseX = 0;
@@ -81,6 +100,11 @@ export class Camera {
   }
 
   update(deltaMS: number): void {
+    if (this.locked) {
+      this.world.position.set(-this.baseX, -this.baseY);
+      return;
+    }
+
     const smoothing = clamp(this.config.smoothing, 0, 1);
     const frames = deltaMS / (1000 / 60);
     const blend = 1 - Math.pow(1 - smoothing, frames);

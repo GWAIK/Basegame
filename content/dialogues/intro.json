@@ -1,8 +1,0 @@
-{
-  "$schema": "../schemas/dialogue.schema.json",
-  "lines": [
-    { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
-    { "speaker": "Unknown", "text": "Are you still there?", "audio": "shared/audio/whisper.wav" },
-    { "speaker": "Lucy", "text": "...Yeah." }
-  ]
-}

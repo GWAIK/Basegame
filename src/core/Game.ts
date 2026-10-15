@@ -4,6 +4,8 @@ import { AudioPlayer } from '../audio/AudioPlayer';
 import { Camera } from '../camera/Camera';
 import type { ContentLibrary } from '../content/ContentLibrary';
 import type { ActionDef, LevelDef, SceneDef } from '../content/types';
+import { devTools, setDevToolsEnabled } from '../debug/devTools';
+import type { InkEffect } from '../dialogue/inkTags';
 import { DialogueBox } from '../dialogue/DialogueBox';
 import { DialogueManager } from '../dialogue/DialogueManager';
 import { StageScene } from '../scenes/StageScene';
@@ -123,7 +125,14 @@ export class Game {
     }
   }
 
-  /** Plays a dialogue from content/dialogues by its file name. */
+  private async toggleDevTools(): Promise<void> {
+    await setDevToolsEnabled(this, !devTools.enabled);
+    if (this.currentLocation) {
+      await this.goTo(this.currentLocation.levelId, this.currentLocation.sceneId);
+    }
+  }
+
+  /** Plays an Ink knot from content/story/story.ink. */
   playDialogue(dialogueId: string): void {
     void this.playDialogueAndWait(dialogueId);
   }
@@ -165,17 +174,21 @@ export class Game {
       if (!this.scene?.isCapturingPointer()) {
         this.camera.setPointer(point.x, point.y);
       }
-      const cursor = this.dialogue.isActive ? null : (this.scene?.onPointerMove(point.x, point.y) ?? null);
+      const cursor = this.dialogue.hasChoices
+        ? (this.dialogue.hover(point.x, point.y) ? 'pointer' : '')
+        : this.dialogue.isActive
+          ? null
+          : (this.scene?.onPointerMove(point.x, point.y) ?? null);
       canvas.style.cursor = cursor ?? '';
     });
 
     canvas.addEventListener('pointerdown', (event) => {
       this.audio.unlock();
+      const point = toCanvas(event);
       if (this.dialogue.isActive) {
-        this.dialogue.advance();
+        this.dialogue.advance(point.x, point.y);
         return;
       }
-      const point = toCanvas(event);
       this.scene?.onPointerDown(point.x, point.y);
     });
 
@@ -197,10 +210,21 @@ export class Game {
       }
 
       if (this.dialogue.isActive) {
-        if (event.code === 'Space' || event.code === 'Enter') {
-          this.dialogue.advance();
-        } else if (event.code === 'Escape') {
-          this.dialogue.close();
+        if (this.dialogue.hasChoices && (event.code === 'ArrowUp' || event.code === 'ArrowDown')) {
+          event.preventDefault();
+          this.dialogue.moveChoice(event.code === 'ArrowUp' ? -1 : 1);
+        } else if (this.dialogue.hasChoices && (event.code === 'Enter' || event.code === 'Space')) {
+          event.preventDefault();
+          this.dialogue.confirmChoice();
+        } else {
+          const digit = choiceNumber(event.code);
+          if (digit !== null) {
+            this.dialogue.choose(digit);
+          } else if (!this.dialogue.hasChoices && (event.code === 'Space' || event.code === 'Enter')) {
+            this.dialogue.advance();
+          } else if (event.code === 'Escape') {
+            this.dialogue.close();
+          }
         }
         return;
       }
@@ -230,6 +254,8 @@ export class Game {
       } else if (action.type === 'level') {
         await this.goTo(action.levelId);
         return;
+      } else if (action.type === 'dev') {
+        await this.toggleDevTools();
       } else {
         window.close();
         await this.showNotice('Close this tab to leave.');
@@ -240,36 +266,58 @@ export class Game {
 
   private showNotice(text: string): Promise<void> {
     return new Promise((resolve) => {
-      this.dialogue.start([{ speaker: '', text, audio: null }], () => resolve());
+      this.dialogue.start([{ speaker: '', text }], () => resolve());
     });
   }
 
-  private playDialogueAndWait(dialogueId: string): Promise<void> {
-    const dialogue = this.content.dialogue(dialogueId);
-    if (!dialogue) {
+  private async playDialogueAndWait(dialogueId: string): Promise<void> {
+    const story = this.content.story;
+    if (!story || !this.content.hasKnot(dialogueId)) {
       console.warn(`Dialogue "${dialogueId}" not found`);
-      return Promise.resolve();
+      return;
     }
 
-    return new Promise((resolve) => {
-      this.events.emit('dialogue:start', { dialogueId });
-      this.dialogue.start(
-        dialogue.lines,
-        () => {
-          this.events.emit('dialogue:end', { dialogueId });
-          resolve();
-        },
-        (line) => {
-          if (!line.audio) {
-            return;
-          }
-          const url = this.content.contentAssetUrl(line.audio);
-          if (url) {
-            this.audio.playSound(url, 1);
-          }
-        },
-      );
+    this.events.emit('dialogue:start', { dialogueId });
+    const ending = await this.dialogue.play(story, dialogueId, (effect) => {
+      this.applyInkEffect(effect);
     });
+    this.events.emit('dialogue:end', { dialogueId });
+    await this.applyInkEnding(ending);
+  }
+
+  private applyInkEffect(effect: InkEffect): void {
+    if (effect.type === 'sound') {
+      const url = this.content.contentAssetUrl(effect.file);
+      if (url) {
+        this.audio.playSound(url, effect.volume);
+      }
+      return;
+    }
+    if (effect.type === 'shake') {
+      this.shakeCamera(effect.intensity, effect.durationMs);
+      return;
+    }
+    if (effect.type === 'event') {
+      this.events.emit('dialogue:event', { name: effect.name });
+    }
+  }
+
+  private async applyInkEnding(effect: InkEffect | null): Promise<void> {
+    if (!effect) {
+      return;
+    }
+    if (effect.type === 'go' && this.currentLocation) {
+      await this.goTo(this.currentLocation.levelId, effect.sceneId);
+      return;
+    }
+    if (effect.type === 'level') {
+      await this.goTo(effect.levelId);
+      return;
+    }
+    if (effect.type === 'quit') {
+      window.close();
+      await this.showNotice('Close this tab to leave.');
+    }
   }
 
   private syncAmbience(level: LevelDef, scene: SceneDef): void {
@@ -292,6 +340,13 @@ function enterActions(scene: SceneDef): readonly ActionDef[] {
     return scene.onEnter;
   }
   return [{ type: 'dialogue', id: scene.dialogue }, ...scene.onEnter];
+}
+
+function choiceNumber(code: string): number | null {
+  if (!/^Digit[1-9]$/.test(code)) {
+    return null;
+  }
+  return Number(code.slice(5)) - 1;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

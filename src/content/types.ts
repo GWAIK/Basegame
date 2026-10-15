@@ -21,7 +21,7 @@ export interface AudioCue {
 /**
  * One step a scene or a trigger can run.
  * sound starts and does not wait. dialogue waits until it closes.
- * go, level, and quit end the list.
+ * go, level, and quit end the list. dev toggles the debug tools.
  */
 export type ActionDef =
   | { type: 'sound'; file: string; volume: number }
@@ -29,7 +29,8 @@ export type ActionDef =
   | { type: 'go'; sceneId: string }
   | { type: 'level'; levelId: string }
   | { type: 'shake'; intensity: number; durationMs: number }
-  | { type: 'quit' };
+  | { type: 'quit' }
+  | { type: 'dev' };
 
 /**
  * A click box. x and y are its center, in pixels of the background.
@@ -82,15 +83,3 @@ export interface LevelDef {
   scenes: readonly SceneDef[];
 }
 
-export interface DialogueLine {
-  speaker: string;
-  text: string;
-  /** Path from content/, played when the line appears. */
-  audio: string | null;
-}
-
-export interface DialogueDef {
-  /** The file name, without .json. */
-  id: string;
-  lines: readonly DialogueLine[];
-}

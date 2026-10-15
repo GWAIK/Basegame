@@ -1,9 +1,10 @@
-import { ContentProblems, parseDialogue, parseLevel } from './parse';
-import type { ActionDef, DialogueDef, LevelDef, SceneDef } from './types';
+import { Compiler, CompilerOptions, type Story } from 'inkjs/compiler/Compiler';
+import { ContentProblems, parseLevel } from './parse';
+import type { ActionDef, LevelDef, SceneDef } from './types';
 
 /*
  * Everything under content/ is found at build time.
- * Adding a level folder, a dialogue file, or an image needs no code change.
+ * Adding a level folder, an Ink include, or an image needs no code change.
  * Vite rewrites asset URLs, so they work at the site root, in a sub-folder
  * (GitHub Pages), and inside the itch.io player.
  */
@@ -11,10 +12,12 @@ const levelFiles = import.meta.glob<unknown>('/content/levels/*/level.json', {
   eager: true,
   import: 'default',
 });
-const dialogueFiles = import.meta.glob<unknown>('/content/dialogues/*.json', {
+const storyFiles = import.meta.glob<string>('/content/story/**/*.ink', {
   eager: true,
+  query: '?raw',
   import: 'default',
 });
+const STORY_FILE = '/content/story/story.ink';
 const assetFiles = import.meta.glob<string>(
   '/content/**/*.{png,jpg,jpeg,webp,gif,mp3,ogg,wav,m4a,PNG,JPG,JPEG,WEBP,GIF,MP3,OGG,WAV,M4A}',
   { eager: true, query: '?url', import: 'default' },
@@ -24,7 +27,10 @@ const CONTENT_ROOT = '/content';
 
 export class ContentLibrary {
   readonly levels: readonly LevelDef[];
-  readonly dialogues: ReadonlyMap<string, DialogueDef>;
+  /** Knot names from content/story/story.ink. A level calls one with { "dialogue": "intro" }. */
+  readonly knots: readonly string[];
+  /** One story for the whole game, so a fact set in a knot stays true afterwards. */
+  readonly story: Story | null;
   /** Readable messages about broken content. Empty when everything loaded. */
   readonly problems: readonly string[];
 
@@ -32,12 +38,14 @@ export class ContentLibrary {
 
   private constructor(
     levels: LevelDef[],
-    dialogues: Map<string, DialogueDef>,
+    knots: string[],
+    story: Story | null,
     assets: Map<string, string>,
     problems: string[],
   ) {
     this.levels = levels;
-    this.dialogues = dialogues;
+    this.knots = knots;
+    this.story = story;
     this.assets = assets;
     this.problems = problems;
   }
@@ -46,14 +54,7 @@ export class ContentLibrary {
     const problems = new ContentProblems();
     const assets = new Map(Object.entries(assetFiles));
 
-    const dialogues = new Map<string, DialogueDef>();
-    for (const [path, raw] of Object.entries(dialogueFiles)) {
-      const id = fileStem(path);
-      const dialogue = parseDialogue(id, displayPath(path), raw, problems);
-      if (dialogue) {
-        dialogues.set(id, dialogue);
-      }
-    }
+    const { story, knots } = compileStory(problems);
 
     const levels: LevelDef[] = [];
     for (const [path, raw] of Object.entries(levelFiles)) {
@@ -69,7 +70,7 @@ export class ContentLibrary {
       problems.add('content/levels', 'no level found. Add a folder with a level.json inside');
     }
 
-    const library = new ContentLibrary(levels, dialogues, assets, problems.messages);
+    const library = new ContentLibrary(levels, knots, story, assets, problems.messages);
     library.checkReferences(problems);
     return library;
   }
@@ -86,8 +87,8 @@ export class ContentLibrary {
     return level.scenes.find((scene) => scene.id === sceneId) ?? null;
   }
 
-  dialogue(dialogueId: string): DialogueDef | null {
-    return this.dialogues.get(dialogueId) ?? null;
+  hasKnot(knot: string): boolean {
+    return this.knots.includes(knot);
   }
 
   /**
@@ -104,15 +105,6 @@ export class ContentLibrary {
   }
 
   private checkReferences(problems: ContentProblems): void {
-    for (const dialogue of this.dialogues.values()) {
-      const file = `content/dialogues/${dialogue.id}.json`;
-      dialogue.lines.forEach((line, index) => {
-        if (line.audio) {
-          this.checkKey(contentKey(line.audio), `${file} → lines[${index}].audio`, problems);
-        }
-      });
-    }
-
     for (const level of this.levels) {
       const file = `content/levels/${level.id}/level.json`;
       if (level.ambience) {
@@ -129,8 +121,8 @@ export class ContentLibrary {
         scene.characters.forEach((character, index) => {
           this.checkAsset(level.id, character.image, `${where}.characters[${index}].image`, problems);
         });
-        if (scene.dialogue && !this.dialogues.has(scene.dialogue)) {
-          problems.add(where, `dialogue "${scene.dialogue}" not found in content/dialogues`);
+        if (scene.dialogue && !this.hasKnot(scene.dialogue)) {
+          problems.add(where, `dialogue "${scene.dialogue}" is not a knot in content/story/story.ink`);
         }
         scene.onEnter.forEach((action, index) => {
           this.checkAction(level, action, `${where}.onEnter[${index}]`, problems);
@@ -154,8 +146,8 @@ export class ContentLibrary {
       this.checkAsset(level.id, action.file, `${where}.sound`, problems);
       return;
     }
-    if (action.type === 'dialogue' && !this.dialogues.has(action.id)) {
-      problems.add(where, `dialogue "${action.id}" not found in content/dialogues`);
+    if (action.type === 'dialogue' && !this.hasKnot(action.id)) {
+      problems.add(where, `dialogue "${action.id}" is not a knot in content/story/story.ink`);
       return;
     }
     if (action.type === 'go' && !level.scenes.some((scene) => scene.id === action.sceneId)) {
@@ -205,9 +197,67 @@ function displayPath(key: string): string {
   return key.replace(/^\//, '');
 }
 
-function fileStem(path: string): string {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  return name.replace(/\.json$/, '');
+function compileStory(problems: ContentProblems): { story: Story | null; knots: string[] } {
+  const source = storyFiles[STORY_FILE];
+  if (source === undefined) {
+    problems.add('content/story/story.ink', 'missing. Dialogues are knots in this file');
+    return { story: null, knots: [] };
+  }
+
+  const files = new Map(Object.entries(storyFiles));
+  const compiler = new Compiler(
+    source,
+    new CompilerOptions('story.ink', [], false, null, {
+      ResolveInkFilename: (filename) => storyPath(filename),
+      LoadInkFileContents: (filename) => {
+        const path = storyPath(filename);
+        const text = files.get(path);
+        if (text === undefined) {
+          problems.add('content/story/story.ink', `INCLUDE not found: ${filename}`);
+          return '';
+        }
+        return text;
+      },
+    }),
+  );
+
+  let story: Story | null = null;
+  try {
+    story = compiler.Compile();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (compiler.errors.length === 0) {
+      problems.add('content/story/story.ink', message);
+    }
+  }
+  for (const message of compiler.errors) {
+    problems.add('content/story/story.ink', message);
+  }
+  for (const message of compiler.warnings) {
+    problems.add('content/story/story.ink', message);
+  }
+  if (!story) {
+    return { story: null, knots: [] };
+  }
+
+  story.onError = (message) => {
+    console.warn(`[ink] ${message}`);
+  };
+  return { story, knots: knotNames(story) };
+}
+
+function storyPath(filename: string): string {
+  const clean = filename.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (clean.startsWith('/content/')) {
+    return clean;
+  }
+  return `/content/story/${clean}`;
+}
+
+function knotNames(story: Story): string[] {
+  return [...story.mainContentContainer.namedContent.keys()]
+    .filter((name) => name.length > 0 && !name.includes(' '))
+    .sort();
 }
 
 function parentFolder(path: string): string {

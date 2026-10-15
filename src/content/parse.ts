@@ -2,8 +2,6 @@ import type {
   ActionDef,
   AudioCue,
   CharacterDef,
-  DialogueDef,
-  DialogueLine,
   TextDef,
   TriggerDef,
   LevelDef,
@@ -44,9 +42,7 @@ const CUE_KEYS = ['file', 'volume'];
 const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
 const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
-const DIALOGUE_KEYS = ['$schema', 'lines'];
-const LINE_KEYS = ['speaker', 'text', 'audio'];
-const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit'] as const;
+const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev'] as const;
 const DEFAULT_TEXT_SIZE = 32;
 const FITS: readonly SceneFit[] = ['cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
@@ -245,6 +241,9 @@ function parseAction(raw: unknown, where: string, problems: ContentProblems): Ac
   if (kind === 'quit') {
     return parseQuitAction(raw, where, problems);
   }
+  if (kind === 'dev') {
+    return parseDevAction(raw, where, problems);
+  }
   return parseShakeAction(raw, where, problems);
 }
 
@@ -282,6 +281,15 @@ function parseLevelAction(raw: Json, where: string, problems: ContentProblems): 
     return null;
   }
   return { type: 'level', levelId };
+}
+
+function parseDevAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['dev'], where, problems);
+  if (raw.dev !== true) {
+    problems.add(where, '"dev" must be true');
+    return null;
+  }
+  return { type: 'dev' };
 }
 
 function parseQuitAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
@@ -412,46 +420,6 @@ function parseText(raw: unknown, where: string, problems: ContentProblems): Text
   }
 
   return { text, x, y, size };
-}
-
-export function parseDialogue(
-  id: string,
-  file: string,
-  raw: unknown,
-  problems: ContentProblems,
-): DialogueDef | null {
-  if (!isObject(raw)) {
-    problems.add(file, 'expected an object');
-    return null;
-  }
-  checkKeys(raw, DIALOGUE_KEYS, file, problems);
-
-  if (!Array.isArray(raw.lines) || raw.lines.length === 0) {
-    problems.add(file, '"lines" needs at least one line');
-    return null;
-  }
-
-  const lines: DialogueLine[] = [];
-  raw.lines.forEach((rawLine, index) => {
-    const where = `${file} → lines[${index}]`;
-    if (!isObject(rawLine)) {
-      problems.add(where, 'expected an object');
-      return;
-    }
-    checkKeys(rawLine, LINE_KEYS, where, problems);
-    const text = optionalString(rawLine, 'text', where, problems);
-    if (text === null) {
-      problems.add(where, '"text" is required');
-      return;
-    }
-    lines.push({
-      speaker: optionalString(rawLine, 'speaker', where, problems) ?? '',
-      text,
-      audio: optionalString(rawLine, 'audio', where, problems),
-    });
-  });
-
-  return lines.length > 0 ? { id, lines } : null;
 }
 
 function isObject(value: unknown): value is Json {

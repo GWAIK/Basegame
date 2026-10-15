@@ -15,9 +15,9 @@ import {
 
 /**
  * Lists the assets on the current scene and edits the selected one.
- * Dev only. It is not the debug panel: that one stays for navigation, audio, and camera.
+ * It is not the debug panel: that one stays for navigation, audio, and camera.
  */
-export function createSceneDock(game: Game): void {
+export function createSceneDock(game: Game): { show: () => void; hide: () => void } {
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'scene-toggle';
@@ -50,7 +50,14 @@ export function createSceneDock(game: Game): void {
   dock.append(header, list, inspector, hint);
   document.body.append(toggle, dock);
 
+  let shown = true;
+
   const redraw = () => {
+    if (!shown) {
+      toggle.hidden = true;
+      dock.hidden = true;
+      return;
+    }
     const scene = currentScene(game);
     toggle.hidden = sceneEditor.open;
     dock.hidden = !sceneEditor.open;
@@ -67,6 +74,18 @@ export function createSceneDock(game: Game): void {
   onSceneTransform(() => refreshNumbers(inspector, currentScene(game)));
   game.events.on('scene:enter', () => resetSceneEditor());
   redraw();
+
+  return {
+    show() {
+      shown = true;
+      redraw();
+    },
+    hide() {
+      shown = false;
+      setSceneEditorOpen(false);
+      redraw();
+    },
+  };
 }
 
 function currentScene(game: Game): SceneDef | null {

@@ -1,6 +1,6 @@
 # Cacophobia
 
-A browser game built with TypeScript, Vite, and PixiJS: a first-person cinematic view with camera look, dialogue, and scenes described in plain JSON files.
+A browser game built with TypeScript, Vite, and PixiJS: a first-person cinematic view with camera look, Ink dialogue, and scenes described in plain JSON files.
 
 The project is split in two:
 
@@ -36,8 +36,8 @@ content/
   levels/
     level-1/
       level.json          scenes, ambience, and interactions
-  dialogues/
-    intro.json            one file per dialogue
+  story/
+    story.ink             every dialogue, as an Ink knot
   ui/                     interface art
   schemas/                editor autocomplete for the JSON files
 ```
@@ -97,7 +97,7 @@ Put the image in `content/shared/backgrounds/`, then add an entry to `scenes` in
 | `fit` | `cover` fills the screen and crops the edges. `contain` shows the whole image, with bars around it |
 | `background` | Image path. Leave it out for a dark placeholder |
 | `characters` | Images placed on the background |
-| `dialogue` | Dialogue played when the scene opens, before `onEnter` |
+| `dialogue` | Ink knot played when the scene opens, before `onEnter` |
 | `onEnter` | Actions run when the scene opens |
 | `look` | `false` holds the camera still. The menu uses this |
 | `texts` | Lines drawn on the scene. They are not clickable |
@@ -113,7 +113,7 @@ Add `content/levels/level-2/level.json`. Point its scenes at the files in `share
 
 ### Menu
 
-The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with a Back button. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Change the words, positions, and sounds in that `level.json`.
+The game opens `content/levels/menu` when that folder exists. It is a normal level. The title is a `texts` line, and Play, Settings, and Quit are triggers with a `label`. Settings is another scene in the same level, with a Back button and a smaller Dev mode button. Play uses `{ "level": "level-1" }`. Quit uses `{ "quit": true }`. Dev mode uses `{ "dev": true }` and shows the debug panel, including in a published build. Change the words, positions, and sounds in that `level.json`.
 
 ### Sound and clicks
 
@@ -124,17 +124,18 @@ The game opens `content/levels/menu` when that folder exists. It is a normal lev
 | Action | Effect |
 | --- | --- |
 | `{ "sound": "/shared/audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
-| `{ "dialogue": "intro" }` | Opens that dialogue and waits until it closes |
+| `{ "dialogue": "intro" }` | Plays that Ink knot and waits until it closes |
 | `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
 | `{ "level": "level-1" }` | Opens that level, then stops the list |
 | `{ "quit": true }` | Tries to close the window. If the tab stays open, a line asks the player to close it |
+| `{ "dev": true }` | Shows or hides the debug panel and the scene tools |
 | `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
 
 A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. A `label` draws that word as a button. Without a label the box is invisible. The pointer changes over it.
 
 The boxes are drawn by one component, `Triggers`. A scene parents it and sets what a click does. The same component can be used on any scene.
 
-In development, Triggers → Show boxes draws every box. Click one to select it: drag the box to move it, drag a white handle to resize it. Values shows `id`, `x`, `y`, `width`, and `height`. Copy values puts that line on the clipboard so it can replace the trigger in `level.json`. While the boxes are shown, a click edits instead of running the action. The checkbox is not included in a build.
+With dev mode on, Triggers → Show boxes draws every box. Click one to select it: drag the box to move it, drag a white handle to resize it. Values shows `id`, `x`, `y`, `width`, and `height`. Copy values puts that line on the clipboard so it can replace the trigger in `level.json`. While the boxes are shown, a click edits instead of running the action. Dev mode is on during local development. In a published build, Settings → Dev mode turns it on.
 
 The browser stays silent until the first click or key press. The ambience and any sound requested before that start on that gesture. The debug panel has a Master slider for the whole mix.
 
@@ -146,19 +147,19 @@ Transparent margins around an animated character are trimmed when it loads, so a
 
 ### Write dialogue
 
-One file per dialogue in `content/dialogues/`. The file name is the id, so `intro.json` is `"intro"`:
+Every dialogue is an Ink knot in `content/story/story.ink`. The knot name is what a level calls, so `=== intro ===` is `{ "dialogue": "intro" }`. Another file can be pulled in with `INCLUDE chapter.ink` from that same folder.
 
-```json
-{
-  "$schema": "../schemas/dialogue.schema.json",
-  "lines": [
-    { "speaker": "Lucy", "text": "I should probably finish this before midnight." },
-    { "speaker": "Unknown", "text": "Are you still there?", "audio": "shared/audio/whisper.wav" }
-  ]
-}
+```ink
+=== intro ===
+Lucy: I should probably finish this before midnight.
+Unknown: Are you still there? # sound: shared/audio/whisper.wav
+Lucy: ...Yeah.
+-> END
 ```
 
-Leave `speaker` out for narration. `audio` is a path from `content/`, played when that line appears. Click, Space, or Enter advances. Escape closes.
+`Name: line` sets the speaker. A line without that prefix is narration. A tag gives the game an order: `# sound: shared/audio/whisper.wav`, `# shake`, `# event: surprised`, `# go: hana`, `# level: level-1`, `# quit`. A choice is a line starting with `*`. The words in brackets are the reply on screen, and what follows is said once it is picked. `# event: name` on that reply is the name the game receives. Click, Space, or Enter advances. Arrows move the highlight, Enter picks it, and so does a click. Escape closes.
+
+A fact set with `~ seen_ticket = true` stays true for the rest of the game, so a later knot can test it.
 
 ### When something is wrong
 
@@ -184,8 +185,8 @@ src/
   core/EventBus.ts             typed events
   core/GameEvents.ts           the list of game events
   content/ContentLibrary.ts    finds and checks everything in content/
-  content/parse.ts             reads level and dialogue JSON
-  content/types.ts             level, scene, dialogue, and action types
+  content/parse.ts             reads level JSON
+  content/types.ts             level, scene, and action types
   audio/AudioPlayer.ts         looping ambience and overlapping effects
   triggers/Triggers.ts         click boxes, debug gizmos
   scenes/StageScene.ts         draws a scene from level.json

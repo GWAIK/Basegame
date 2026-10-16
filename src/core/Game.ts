@@ -44,6 +44,8 @@ export class Game {
   private loadToken = 0;
   private actionToken = 0;
   private paused = false;
+  /** Game scene hidden while Settings was opened from the pause menu. */
+  private returnToPause: { scene: StageScene; location: SceneLocation } | null = null;
 
   constructor(readonly content: ContentLibrary) {}
 
@@ -112,6 +114,11 @@ export class Game {
     if (!definition) {
       console.warn(`Scene "${sceneId}" not found in level "${levelId}"`);
       return;
+    }
+
+    if (this.returnToPause && !(level.id === 'menu' && definition.id === 'settings')) {
+      this.returnToPause.scene.destroy();
+      this.returnToPause = null;
     }
 
     const token = ++this.loadToken;
@@ -309,10 +316,17 @@ export class Game {
     if (!this.scene) {
       return;
     }
-    this.paused = !this.paused;
-    this.play.filters = this.paused ? [this.blur] : null;
+    this.setPaused(!this.paused);
+  }
+
+  private setPaused(paused: boolean): void {
+    if (this.paused === paused) {
+      return;
+    }
+    this.paused = paused;
+    this.play.filters = paused ? [this.blur] : null;
     this.blur.strength = PAUSE_CONFIG.blur;
-    this.pauseMenu.setOpen(this.paused);
+    this.pauseMenu.setOpen(paused);
     this.app.canvas.style.cursor = '';
   }
 
@@ -321,12 +335,66 @@ export class Game {
     if (url) {
       this.audio.playSound(url, 0.7);
     }
-    this.togglePause();
-    if (action === 'settings') {
-      void this.goTo('menu', 'settings');
-    } else if (action === 'menu') {
+    if (action === 'settings' && this.scene instanceof StageScene && this.currentLocation) {
+      const held = { scene: this.scene, location: this.currentLocation };
+      this.world.removeChild(held.scene.root);
+      this.scene = null;
+      this.currentLocation = null;
+      this.setPaused(false);
+      void this.openSettingsFromPause(held);
+      return;
+    }
+    this.setPaused(false);
+    if (action === 'menu') {
       void this.goTo('menu');
     }
+  }
+
+  /** Settings stays the menu scene. Back returns to the paused scene instead of Main. */
+  private async openSettingsFromPause(held: { scene: StageScene; location: SceneLocation }): Promise<void> {
+    await this.goTo('menu', 'settings');
+    if (this.returnToPause) {
+      held.scene.destroy();
+      return;
+    }
+    if (this.currentLocation?.levelId === 'menu' && this.currentLocation.sceneId === 'settings') {
+      this.returnToPause = held;
+      return;
+    }
+    if (!this.scene) {
+      this.scene = held.scene;
+      this.currentLocation = held.location;
+      this.world.addChild(held.scene.root);
+      if (!this.paused) {
+        this.setPaused(true);
+      }
+      return;
+    }
+    held.scene.destroy();
+  }
+
+  private returnToPausedScene(): void {
+    const held = this.returnToPause;
+    this.returnToPause = null;
+    if (!held) {
+      return;
+    }
+
+    this.actionToken += 1;
+    this.dialogue.close();
+    if (this.scene && this.currentLocation) {
+      this.events.emit('scene:exit', this.currentLocation);
+      this.scene.destroy();
+    }
+
+    this.scene = held.scene;
+    this.currentLocation = held.location;
+    this.camera.setLocked(!held.scene.definition.look);
+    this.world.addChild(held.scene.root);
+    this.events.emit('scene:enter', held.location);
+    this.refreshFullscreenLabel();
+    this.syncAmbience(held.scene.level, held.scene.definition);
+    this.setPaused(true);
   }
 
   /** Runs steps in order. A newer list, or a scene change, abandons this one. */
@@ -346,6 +414,10 @@ export class Game {
       } else if (action.type === 'shake') {
         this.shakeCamera(action.intensity, action.durationMs);
       } else if (action.type === 'go') {
+        if (this.returnToPause && action.sceneId === 'main') {
+          this.returnToPausedScene();
+          return;
+        }
         await this.goTo(level.id, action.sceneId);
         return;
       } else if (action.type === 'level') {

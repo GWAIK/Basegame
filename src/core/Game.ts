@@ -280,7 +280,7 @@ export class Game {
       if (PAUSE_KEYS.listening) {
         return;
       }
-      if (isPauseKey(event.code)) {
+      if (isPauseKey(event.code) && (this.paused || this.isPlaying())) {
         event.preventDefault();
         this.togglePause();
         return;
@@ -312,8 +312,13 @@ export class Game {
     });
   }
 
+  /** Menus are the menu level. Pause only applies once Play has opened a level. */
+  private isPlaying(): boolean {
+    return this.currentLocation !== null && this.currentLocation.levelId !== 'menu';
+  }
+
   private togglePause(): void {
-    if (!this.scene) {
+    if (!this.scene || (!this.paused && !this.isPlaying())) {
       return;
     }
     this.setPaused(!this.paused);

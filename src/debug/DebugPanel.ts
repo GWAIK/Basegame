@@ -1,6 +1,7 @@
 import GUI, { type Controller } from 'lil-gui';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { Game } from '../core/Game';
+import { PAUSE_CONFIG, PAUSE_KEYS } from '../pause/PauseConfig';
 import { onTriggerSelection, triggerDebug, triggerSnippet } from './triggerDebug';
 
 /**
@@ -18,6 +19,8 @@ export function createDebugPanel(game: Game): GUI {
   addTriggers(gui);
   addAudio(gui, game);
   addCamera(gui, game);
+  addShortcuts(gui);
+  addPause(gui);
   bindToggle(gui);
 
   return gui;
@@ -138,6 +141,70 @@ function addCamera(gui: GUI, game: Game): void {
   folder.add(CAMERA_CONFIG, 'headbobY', 0, 12, 0.1).name('Headbob Y');
   folder.add(CAMERA_CONFIG, 'headbobPeriod', 800, 8000, 50).name('Headbob period');
   folder.add({ run: () => run(() => game.resetCamera()) }, 'run').name('Reset camera');
+}
+
+function addShortcuts(gui: GUI): void {
+  const folder = gui.addFolder('Shortcuts');
+  const primary = folder.add({ bind: () => arm('primary') }, 'bind');
+  const secondary = folder.add({ bind: () => arm('secondary') }, 'bind');
+
+  const refresh = () => {
+    primary.name(slotName('primary'));
+    secondary.name(slotName('secondary'));
+  };
+  const arm = (slot: 'primary' | 'secondary') => {
+    PAUSE_KEYS.listening = slot;
+    refresh();
+  };
+  refresh();
+
+  window.addEventListener('keydown', (event) => {
+    const slot = PAUSE_KEYS.listening;
+    if (!slot || event.repeat || isModifier(event.code)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    PAUSE_KEYS[slot] = event.code;
+    PAUSE_KEYS.listening = null;
+    refresh();
+    blurFocus();
+  }, true);
+}
+
+function addPause(gui: GUI): void {
+  const folder = gui.addFolder('Pause');
+  folder.add(PAUSE_CONFIG, 'blur', 0, 32, 0.5).name('Blur');
+  folder.add(PAUSE_CONFIG, 'buttonWidth', 80, 1400, 1).name('Width');
+  folder.add(PAUSE_CONFIG, 'buttonHeight', 24, 280, 1).name('Height');
+  folder.add(PAUSE_CONFIG, 'x', 0, 1920, 1).name('X');
+  folder.add(PAUSE_CONFIG, 'resumeY', 0, 1080, 1).name('Resume Y');
+  folder.add(PAUSE_CONFIG, 'settingsY', 0, 1080, 1).name('Settings Y');
+  folder.add(PAUSE_CONFIG, 'menuY', 0, 1080, 1).name('Main menu Y');
+}
+
+function slotName(slot: 'primary' | 'secondary'): string {
+  if (PAUSE_KEYS.listening === slot) {
+    return 'Press a key';
+  }
+  return `Pause: ${keyLabel(PAUSE_KEYS[slot])}`;
+}
+
+function keyLabel(code: string): string {
+  if (code.startsWith('Key')) {
+    return code.slice(3);
+  }
+  if (code.startsWith('Digit')) {
+    return code.slice(5);
+  }
+  if (code === 'Escape') {
+    return 'Esc';
+  }
+  return code;
+}
+
+function isModifier(code: string): boolean {
+  return code.startsWith('Shift') || code.startsWith('Control') || code.startsWith('Alt') || code.startsWith('Meta');
 }
 
 function bindToggle(gui: GUI): void {

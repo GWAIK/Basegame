@@ -61,6 +61,11 @@ export class Game {
     return this.paused;
   }
 
+  /** Dimensions of the open scene in background pixels, if one is loaded. */
+  get sceneDimensions(): { width: number; height: number } | null {
+    return this.scene instanceof StageScene ? this.scene.dimensions : null;
+  }
+
   async start(host: HTMLElement): Promise<void> {
     await this.app.init({
       resizeTo: host,

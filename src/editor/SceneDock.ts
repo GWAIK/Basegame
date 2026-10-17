@@ -168,6 +168,10 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
       return;
     }
     list.append(renderList(scene, search.value));
+    const selectedRow = list.querySelector('.editor-row.is-selected');
+    if (selectedRow instanceof HTMLElement) {
+      selectedRow.scrollIntoView({ block: 'nearest' });
+    }
     detailsBody.append(renderDetails(game, scene, () => {
       cameraOpen = !cameraOpen;
       redraw();
@@ -316,16 +320,18 @@ function fillMenu(game: Game, menu: HTMLElement, closeMenu: () => void): void {
       if (!scene) {
         return;
       }
-      const selection = placeTrigger(scene);
+      const selection = placeTrigger(scene, game.sceneDimensions);
       triggerDebug.visible = true;
-      void reloadSelection(game, selection, closeMenu);
+      closeMenu();
+      setSceneEditorOpen(true);
+      selectSceneItem(selection);
     }),
     menuButton('Text', () => {
       const scene = currentScene(game);
       if (!scene) {
         return;
       }
-      void reloadSelection(game, placeText(scene), closeMenu);
+      void reloadSelection(game, placeText(scene, game.sceneDimensions), closeMenu);
     }),
   );
 
@@ -359,7 +365,7 @@ function fillMenu(game: Game, menu: HTMLElement, closeMenu: () => void): void {
           if (!scene) {
             return;
           }
-          void reloadSelection(game, placeCharacter(scene, image.path), closeMenu);
+          void reloadSelection(game, placeCharacter(scene, image.path, game.sceneDimensions), closeMenu);
         }),
       );
     }

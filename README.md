@@ -11,10 +11,11 @@ The project is split in two:
 
 ```bash
 npm install
-npm run dev
+npm run dev              # game at /
+npm run builder          # dialogue editor at /builder.html
 ```
 
-Open the URL Vite prints (usually `http://localhost:5173`). Saving any file in `content/` reloads the page.
+Open the URL Vite prints (usually `http://localhost:5173`). Saving any file in `content/` reloads the page. The dialogue builder lives in `src/dialogue-builder/` and saves into `content/story/`.
 
 ## Build
 
@@ -78,7 +79,7 @@ Put the image in `content/shared/backgrounds/`, then add an entry to `scenes` in
           "height": 486,
           "actions": [
             { "sound": "/shared/audio/click.wav" },
-            { "dialogue": "intro" },
+            { "dialogue": "level1_stairwell" },
             { "shake": { "intensity": 8, "duration": 280 } },
             { "go": "hana" }
           ]
@@ -124,7 +125,7 @@ The game opens `content/levels/menu` when that folder exists. It is a normal lev
 | Action | Effect |
 | --- | --- |
 | `{ "sound": "/shared/audio/click.wav" }` | Plays once, at `volume` if set. Does not wait |
-| `{ "dialogue": "intro" }` | Plays that Ink knot and waits until it closes |
+| `{ "dialogue": "level1_stairwell" }` | Plays that Ink knot and waits until it closes |
 | `{ "go": "hana" }` | Opens that scene in the same level, then stops the list |
 | `{ "level": "level-1" }` | Opens that level, then stops the list |
 | `{ "quit": true }` | Tries to close the window. If the tab stays open, a line asks the player to close it |
@@ -148,19 +149,45 @@ Transparent margins around an animated character are trimmed when it loads, so a
 
 ### Write dialogue
 
-Every dialogue is an Ink knot in `content/story/story.ink`. The knot name is what a level calls, so `=== intro ===` is `{ "dialogue": "intro" }`. Another file can be pulled in with `INCLUDE chapter.ink` from that same folder.
+Dialogues are Ink. Prefer the **Dialogue Builder** in this repo (`src/dialogue-builder/`): a visual editor with no manual Ink typing. It writes `.ink` into `content/story/`. The on-screen panel stays the game's dialogue box (bottom line, red choice list).
+
+```text
+content/story/
+  story.ink                 global VAR lines and INCLUDE only
+  levels/
+    level-1.ink             knots for level 1
+    level-2.ink             knots for level 2
+```
+
+A knot name is what a level calls. Builder knots are prefixed by level, so `=== level1_stairwell ===` is `{ "dialogue": "level1_stairwell" }`.
 
 ```ink
-=== intro ===
+=== level1_intro ===
 Lucy: I should probably finish this before midnight.
 Unknown: Are you still there? # sound: shared/audio/whisper.wav
 Lucy: ...Yeah.
 -> END
 ```
 
-`Name: line` sets the speaker. A line without that prefix is narration. A tag gives the game an order: `# sound: shared/audio/whisper.wav`, `# shake`, `# event: surprised`, `# go: hana`, `# level: level-1`, `# quit`. A choice is a line starting with `*`. The words in brackets are the reply on screen, and what follows is said once it is picked. `# event: name` on that reply is the name the game receives. Click, Space, or Enter advances. Arrows move the highlight, Enter picks it, and so does a click. Escape closes.
+`Name: line` sets the speaker. A line without that prefix is narration. A tag gives the game an order: `# sound: shared/audio/whisper.wav`, `# shake`, `# event: surprised`, `# go: hana`, `# level: level-2`, `# quit`. Paths in `# sound` start under `content/` (same as level JSON without the leading slash). A choice is a line starting with `*`. The words in brackets are the reply on screen; what follows is said once it is picked. `# event: name` is the name the game receives. Click, Space, or Enter advances. Arrows move the highlight, Enter picks it, and so does a click. Escape closes. `# go`, `# level`, and `# quit` close the dialogue and then change scene, change level, or ask to quit.
 
-A fact set with `~ seen_ticket = true` stays true for the rest of the game, so a later knot can test it.
+A fact set with `~ reply = "surprised"` stays true for the rest of the game, so a later knot can test it.
+
+#### Dialogue Builder
+
+```bash
+npm run builder          # opens /builder.html
+# or, with the game already running:
+# open http://localhost:5173/builder.html
+# Debug panel → Dialogues → Open builder
+```
+
+1. Edit the story in the builder (facts, levels, knots, lines, choices, commands, conditions).
+2. Click **Save to game**. That writes `content/story/story.ink` and `content/story/levels/level-N.ink` and the game reloads.
+3. Point the scene or trigger at the knot: `{ "dialogue": "level1_stairwell" }`.
+4. Sound tags must name files that exist under `content/` (for example `shared/audio/whisper.wav`). Scene and level tags must name ids that exist in `content/levels/`.
+
+**Download .ink** is a backup only. Day-to-day writing uses **Save to game**.
 
 ### When something is wrong
 

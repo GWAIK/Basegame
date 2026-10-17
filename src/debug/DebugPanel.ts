@@ -76,6 +76,16 @@ function addNavigation(gui: GUI, game: Game): void {
 
 function addDialogues(gui: GUI, game: Game): void {
   const folder = gui.addFolder('Dialogues');
+  folder
+    .add(
+      {
+        open: () => {
+          window.open(new URL('builder.html', window.location.href).href, '_blank');
+        },
+      },
+      'open',
+    )
+    .name('Open builder');
   for (const id of game.content.knots) {
     folder.add({ play: () => run(() => game.playDialogue(id)) }, 'play').name(id);
   }

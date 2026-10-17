@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import type { TriggerDef } from '../content/types';
 import { devTools } from '../debug/devTools';
 import { setTriggerSelection, triggerDebug } from '../debug/triggerDebug';
+import { notifySceneTransform, sceneEditor, selectSceneItem } from '../editor/sceneEditor';
 
 const MIN_SIZE = 32;
 const HANDLE_SCREEN = 14;
@@ -37,6 +38,7 @@ export class Triggers {
   private drag: Drag | null = null;
   private hovered: string | null = null;
   private faceKey = '';
+  private debugKey = '';
   private hiddenKey = '';
   private hiddenTriggerIds: ReadonlySet<string> = new Set();
   private shown = false;
@@ -81,11 +83,16 @@ export class Triggers {
     const hit = this.bodyAt(local.x, local.y);
     if (!hit) {
       this.clearSelection();
+      selectSceneItem(null);
       this.redraw(this.drawnScale || 1);
       return;
     }
     this.selected = hit;
     this.drag = this.beginDrag(hit, local.x, local.y, null);
+    const index = this.definitions.indexOf(hit);
+    if (index !== -1) {
+      selectSceneItem({ kind: 'trigger', index });
+    }
     this.publish();
     this.redraw(this.drawnScale || 1);
   }
@@ -99,6 +106,7 @@ export class Triggers {
     if (this.drag && this.selected) {
       this.applyDrag(this.selected, this.drag, local.x, local.y);
       this.publish();
+      notifySceneTransform();
       this.redraw(this.drawnScale || 1);
       return this.drag.cursor;
     }
@@ -128,6 +136,7 @@ export class Triggers {
     trigger.height = Math.max(MIN_SIZE, Math.round(trigger.height));
     this.drag = null;
     this.publish();
+    notifySceneTransform();
     this.redraw(this.drawnScale || 1);
   }
 
@@ -140,6 +149,7 @@ export class Triggers {
     this.hiddenKey = key;
     this.hiddenTriggerIds = ids;
     this.faceKey = '';
+    this.debugKey = '';
     if (this.shown) {
       this.redraw(this.drawnScale || 1);
     }
@@ -155,6 +165,7 @@ export class Triggers {
     if (!this.editing) {
       if (this.shown || this.selected) {
         this.shown = false;
+        this.debugKey = '';
         this.debugLayer.visible = false;
         this.debugLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
         this.drag = null;
@@ -162,9 +173,12 @@ export class Triggers {
       }
       return;
     }
+    this.syncEditorSelection();
     this.debugLayer.visible = true;
-    if (!this.shown || this.drawnScale !== scale) {
+    const key = this.computeDebugKey(scale);
+    if (!this.shown || key !== this.debugKey) {
       this.shown = true;
+      this.debugKey = key;
       this.redraw(scale);
     }
   }
@@ -193,6 +207,9 @@ export class Triggers {
   private bodyAt(x: number, y: number): TriggerDef | null {
     for (let index = this.definitions.length - 1; index >= 0; index -= 1) {
       const trigger = this.definitions[index];
+      if (!trigger || this.isHidden(trigger)) {
+        continue;
+      }
       const insideX = Math.abs(x - trigger.x) <= trigger.width / 2;
       const insideY = Math.abs(y - trigger.y) <= trigger.height / 2;
       if (insideX && insideY) {
@@ -310,9 +327,29 @@ export class Triggers {
       ...visible.filter((trigger) => trigger !== this.selected),
       ...(this.selected && visible.includes(this.selected) ? [this.selected] : []),
     ];
+    const showHandles = !sceneEditor.open;
     for (const trigger of ordered) {
-      this.debugLayer.addChild(drawTrigger(trigger, trigger === this.selected, sceneScale));
+      this.debugLayer.addChild(drawTrigger(trigger, trigger === this.selected && showHandles, sceneScale));
     }
+  }
+
+  private syncEditorSelection(): void {
+    const selection = sceneEditor.selected;
+    const next =
+      selection?.kind === 'trigger' ? (this.definitions[selection.index] ?? null) : null;
+    if (next !== this.selected) {
+      this.selected = next;
+      this.publish();
+    }
+  }
+
+  private computeDebugKey(sceneScale: number): string {
+    const visible = this.definitions.filter((trigger) => !this.isHidden(trigger));
+    return (
+      visible
+        .map((trigger) => `${trigger.id}:${trigger.x}:${trigger.y}:${trigger.width}:${trigger.height}:${trigger === this.selected ? 1 : 0}`)
+        .join('|') + `|${sceneEditor.open ? 1 : 0}|${sceneScale}`
+    );
   }
 }
 

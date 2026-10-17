@@ -58,6 +58,10 @@ export class StageScene extends Scene {
     this.triggers.onActivate = handler;
   }
 
+  get dimensions(): { width: number; height: number } {
+    return { width: this.sceneWidth, height: this.sceneHeight };
+  }
+
   async load(): Promise<void> {
     const background = this.definition.background;
     const [backgroundImage, ...characterImages] = await Promise.all([

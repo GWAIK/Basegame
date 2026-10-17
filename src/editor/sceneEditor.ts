@@ -40,10 +40,6 @@ export function setSceneEditorOpen(open: boolean): void {
 }
 
 export function selectSceneItem(selection: SceneSelection | null): void {
-  const current = sceneEditor.selected;
-  if (current?.kind === selection?.kind && current?.index === selection?.index) {
-    return;
-  }
   sceneEditor.selected = selection;
   emitStructure();
 }
@@ -57,11 +53,23 @@ export function toggleSceneItemHidden(key: string): void {
   emitStructure();
 }
 
-const PLACE_X = 960;
-const PLACE_Y = 540;
+const DEFAULT_PLACE_X = 960;
+const DEFAULT_PLACE_Y = 540;
 
-/** Adds a trigger at the middle of a 1920×1080 scene. The caller reloads the scene. */
-export function placeTrigger(scene: SceneDef): SceneSelection {
+export interface SceneDimensions {
+  width: number;
+  height: number;
+}
+
+function centerOf(size?: SceneDimensions | null): { x: number; y: number } {
+  if (!size || size.width <= 0 || size.height <= 0) {
+    return { x: DEFAULT_PLACE_X, y: DEFAULT_PLACE_Y };
+  }
+  return { x: Math.round(size.width / 2), y: Math.round(size.height / 2) };
+}
+
+/** Adds a trigger at the middle of the scene. The caller reloads the scene. */
+export function placeTrigger(scene: SceneDef, size?: SceneDimensions | null): SceneSelection {
   const triggers = scene.triggers as TriggerDef[];
   const ids = new Set(triggers.map((trigger) => trigger.id));
   let n = triggers.length + 1;
@@ -70,29 +78,32 @@ export function placeTrigger(scene: SceneDef): SceneSelection {
     n += 1;
     id = `trigger-${n}`;
   }
+  const center = centerOf(size);
   triggers.push({
     id,
-    label: 'Trigger',
-    x: PLACE_X,
-    y: PLACE_Y,
-    width: 280,
-    height: 72,
+    label: null,
+    x: center.x,
+    y: center.y,
+    width: Math.min(280, Math.max(64, Math.round((size?.width ?? 1920) * 0.2))),
+    height: Math.min(120, Math.max(48, Math.round((size?.height ?? 1080) * 0.1))),
     actions: [],
   });
   return { kind: 'trigger', index: triggers.length - 1 };
 }
 
-/** Adds a text at the middle of a 1920×1080 scene. The caller reloads the scene. */
-export function placeText(scene: SceneDef): SceneSelection {
+/** Adds a text at the middle of the scene. The caller reloads the scene. */
+export function placeText(scene: SceneDef, size?: SceneDimensions | null): SceneSelection {
   const texts = scene.texts as TextDef[];
-  texts.push({ text: 'Text', x: PLACE_X, y: PLACE_Y, size: 48 });
+  const center = centerOf(size);
+  texts.push({ text: 'Text', x: center.x, y: center.y, size: 48 });
   return { kind: 'text', index: texts.length - 1 };
 }
 
-/** Adds a character at the middle of a 1920×1080 scene. The caller reloads the scene. */
-export function placeCharacter(scene: SceneDef, image: string): SceneSelection {
+/** Adds a character at the middle of the scene. The caller reloads the scene. */
+export function placeCharacter(scene: SceneDef, image: string, size?: SceneDimensions | null): SceneSelection {
   const characters = scene.characters as CharacterDef[];
-  characters.push({ image, x: PLACE_X, y: PLACE_Y, scale: 1 });
+  const center = centerOf(size);
+  characters.push({ image, x: center.x, y: center.y, scale: 1 });
   return { kind: 'character', index: characters.length - 1 };
 }
 

@@ -1,5 +1,7 @@
 import type { SceneDef } from '../content/types';
+import { createDialogueBuilderWindow } from './DialogueBuilderWindow';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
+import { DIALOGUE_CONFIG } from '../dialogue/DialogueConfig';
 import type { Game } from '../core/Game';
 import { devTools } from '../debug/devTools';
 import { triggerDebug } from '../debug/triggerDebug';
@@ -62,13 +64,19 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
   addButton.title = 'Add';
   addButton.setAttribute('aria-label', 'Add');
   addButton.setAttribute('aria-expanded', 'false');
+  const dialogueWindow = createDialogueBuilderWindow();
+  const dialogueButton = document.createElement('button');
+  dialogueButton.type = 'button';
+  dialogueButton.className = 'editor-mode';
+  dialogueButton.textContent = 'Dialogue';
+  dialogueButton.title = 'Open the dialogue builder';
   const hideButton = document.createElement('button');
   hideButton.type = 'button';
   hideButton.className = 'editor-hide';
   hideButton.title = 'Hide (H)';
   hideButton.setAttribute('aria-label', 'Hide');
   hideButton.append(chevronIcon(true));
-  barActions.append(selectMode, addButton, hideButton);
+  barActions.append(dialogueButton, selectMode, addButton, hideButton);
   outlinerBar.append(outlinerTitle, barActions);
 
   const nav = document.createElement('div');
@@ -102,6 +110,16 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
   split.className = 'editor-split';
   split.setAttribute('role', 'separator');
 
+  const dialoguePanel = document.createElement('section');
+  dialoguePanel.className = 'editor-dialogue';
+  const dialogueLabel = document.createElement('span');
+  dialogueLabel.textContent = 'Dialogue Builder';
+  const dialogueOpen = document.createElement('button');
+  dialogueOpen.type = 'button';
+  dialogueOpen.className = 'editor-mode';
+  dialogueOpen.textContent = 'Open';
+  dialoguePanel.append(dialogueLabel, dialogueOpen);
+
   const details = document.createElement('section');
   details.className = 'editor-details';
   const detailsBar = document.createElement('header');
@@ -125,13 +143,14 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
   tab.hidden = true;
   tab.append(chevronIcon(false));
 
-  shell.append(resize, outliner, split, details, menu);
+  shell.append(resize, outliner, split, dialoguePanel, details, menu);
   document.body.append(shell, tab);
 
   let shown = true;
   let available = true;
   let syncing = false;
   let cameraOpen = false;
+  let dialogueStyleOpen = false;
 
   const closeMenu = () => {
     menu.hidden = true;
@@ -158,6 +177,10 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
       return;
     }
     syncNav();
+    const builderOpen = dialogueWindow.isOpen();
+    dialogueButton.classList.toggle('is-on', builderOpen);
+    dialogueOpen.classList.toggle('is-on', builderOpen);
+    dialogueOpen.textContent = builderOpen ? 'Close' : 'Open';
     selectMode.classList.toggle('is-on', sceneEditor.open);
     selectMode.setAttribute('aria-pressed', sceneEditor.open ? 'true' : 'false');
     boxes.checked = triggerDebug.visible;
@@ -175,7 +198,10 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
     detailsBody.append(renderDetails(game, scene, () => {
       cameraOpen = !cameraOpen;
       redraw();
-    }, cameraOpen));
+    }, cameraOpen, () => {
+      dialogueStyleOpen = !dialogueStyleOpen;
+      redraw();
+    }, dialogueStyleOpen));
   };
 
   hideButton.addEventListener('click', () => {
@@ -186,6 +212,13 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
     expand();
     blurFocus();
   });
+  const toggleDialogue = () => {
+    dialogueWindow.toggle();
+    redraw();
+    blurFocus();
+  };
+  dialogueButton.addEventListener('click', toggleDialogue);
+  dialogueOpen.addEventListener('click', toggleDialogue);
   selectMode.addEventListener('click', () => {
     setSceneEditorOpen(!sceneEditor.open);
     blurFocus();
@@ -277,6 +310,7 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
     available = false;
     shown = false;
     closeMenu();
+    dialogueWindow.close();
     setSceneEditorOpen(false);
   }
 
@@ -498,17 +532,19 @@ function renderDetails(
   scene: SceneDef,
   toggleCamera: () => void,
   cameraOpen: boolean,
+  toggleDialogue: () => void,
+  dialogueOpen: boolean,
 ): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const selection = sceneEditor.selected;
   if (!selection) {
-    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen));
+    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen));
     return fragment;
   }
 
   const row = rowsFor(scene, selection.kind)[selection.index];
   if (!row) {
-    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen));
+    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen));
     return fragment;
   }
 
@@ -607,6 +643,8 @@ function renderWorld(
   scene: SceneDef,
   toggleCamera: () => void,
   cameraOpen: boolean,
+  toggleDialogue: () => void,
+  dialogueOpen: boolean,
 ): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const name = document.createElement('p');
@@ -652,6 +690,36 @@ function renderWorld(
       actions.append(button);
     }
     fragment.append(actions);
+  }
+
+  const dialogue = document.createElement('button');
+  dialogue.type = 'button';
+  dialogue.className = 'editor-category';
+  dialogue.textContent = `${dialogueOpen ? '▾' : '▸'}  Dialogue`;
+  dialogue.addEventListener('click', toggleDialogue);
+  fragment.append(dialogue);
+  if (dialogueOpen) {
+    fragment.append(rangeField('Name', DIALOGUE_CONFIG.nameSize, 12, 96, 1, (value) => {
+      DIALOGUE_CONFIG.nameSize = value;
+    }));
+    fragment.append(rangeField('Text', DIALOGUE_CONFIG.textSize, 12, 72, 1, (value) => {
+      DIALOGUE_CONFIG.textSize = value;
+    }));
+    fragment.append(rangeField('X', DIALOGUE_CONFIG.x, 0, 1200, 1, (value) => {
+      DIALOGUE_CONFIG.x = value;
+    }));
+    fragment.append(rangeField('Bottom', DIALOGUE_CONFIG.bottom, 0, 800, 1, (value) => {
+      DIALOGUE_CONFIG.bottom = value;
+    }));
+    fragment.append(colorField('Line', DIALOGUE_CONFIG.lineColor, (value) => {
+      DIALOGUE_CONFIG.lineColor = value;
+    }));
+    fragment.append(rangeField('Thick', DIALOGUE_CONFIG.lineThickness, 1, 24, 1, (value) => {
+      DIALOGUE_CONFIG.lineThickness = value;
+    }));
+    fragment.append(rangeField('Length', DIALOGUE_CONFIG.lineLength, 40, 1600, 1, (value) => {
+      DIALOGUE_CONFIG.lineLength = value;
+    }));
   }
 
   const camera = document.createElement('button');
@@ -766,6 +834,19 @@ function numberField(
     onInput(next);
     notifySceneTransform();
   });
+  field.append(caption, input);
+  return field;
+}
+
+function colorField(label: string, value: string, onInput: (value: string) => void): HTMLLabelElement {
+  const field = document.createElement('label');
+  field.className = 'editor-field';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = value;
+  input.addEventListener('input', () => onInput(input.value));
   field.append(caption, input);
   return field;
 }

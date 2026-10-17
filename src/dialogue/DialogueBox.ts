@@ -1,21 +1,21 @@
 import { Container, Graphics, Text } from 'pixi.js';
+import { DIALOGUE_CONFIG } from './DialogueConfig';
 
-const MARGIN = 28;
-const MAX_WIDTH = 720;
 const CHOICE_WIDTH = 820;
-const PADDING = 18;
 const CHOICE_RED = 0xb01e2c;
+const NAME_GAP = 8;
+const TEXT_GAP = 10;
 
 /**
- * Screen-space dialogue panel. Parent it to the UI layer, not the camera world.
- * Choices are drawn under the line. The game hit-tests them from the click position.
+ * Screen-space dialogue. Parent it to the UI layer, not the camera world.
+ * A spoken line is a name, a rule, and the text, with no plate behind them.
+ * Choices stay as their own list. The game hit-tests them from the click position.
  */
 export class DialogueBox {
   private readonly root = new Container();
-  private readonly background = new Graphics();
+  private readonly rule = new Graphics();
   private readonly speaker: Text;
   private readonly body: Text;
-  private readonly hint: Text;
   private readonly choiceRows: Container[] = [];
   private selectedChoice = 0;
   private viewWidth = 800;
@@ -25,9 +25,11 @@ export class DialogueBox {
     this.speaker = new Text({
       text: '',
       style: {
-        fill: '#ffffff',
-        fontFamily: 'Georgia, "Times New Roman", serif',
-        fontSize: 14,
+        fill: '#f0b429',
+        fontFamily: 'Impact, "Arial Black", sans-serif',
+        fontStyle: 'italic',
+        fontWeight: 'bold',
+        fontSize: DIALOGUE_CONFIG.nameSize,
       },
     });
 
@@ -36,23 +38,13 @@ export class DialogueBox {
       style: {
         fill: '#ffffff',
         fontFamily: 'Georgia, "Times New Roman", serif',
-        fontSize: 22,
+        fontSize: DIALOGUE_CONFIG.textSize,
         wordWrap: true,
         wordWrapWidth: 400,
       },
     });
 
-    this.hint = new Text({
-      text: 'Click, Space, or Enter',
-      style: {
-        fill: '#ffffff',
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: 12,
-      },
-    });
-    this.hint.alpha = 0.45;
-
-    this.root.addChild(this.background, this.speaker, this.body, this.hint);
+    this.root.addChild(this.speaker, this.rule, this.body);
     this.root.visible = false;
     this.root.eventMode = 'none';
     ui.addChild(this.root);
@@ -60,9 +52,8 @@ export class DialogueBox {
 
   show(speaker: string, text: string): void {
     this.clearChoices();
-    this.speaker.text = speaker;
+    this.speaker.text = speaker.toLocaleUpperCase('en-US');
     this.body.text = text;
-    this.hint.visible = true;
     this.root.visible = true;
     this.layout();
   }
@@ -79,7 +70,6 @@ export class DialogueBox {
       this.choiceRows.push(createChoice(label, index));
       this.root.addChild(this.choiceRows[this.choiceRows.length - 1]);
     });
-    this.hint.visible = labels.length === 0;
     this.root.visible = true;
     this.layout();
   }
@@ -125,6 +115,13 @@ export class DialogueBox {
     }
   }
 
+  /** Reads font, position, and the rule, so the debug panel applies while a line is up. */
+  refresh(): void {
+    if (this.root.visible) {
+      this.layout();
+    }
+  }
+
   private clearChoices(): void {
     for (const row of this.choiceRows) {
       row.destroy({ children: true });
@@ -138,40 +135,43 @@ export class DialogueBox {
       return;
     }
 
-    const width = Math.min(MAX_WIDTH, Math.max(280, this.viewWidth - MARGIN * 2));
-    this.body.style.wordWrapWidth = width - PADDING * 2;
+    this.speaker.style.fontSize = DIALOGUE_CONFIG.nameSize;
+    this.body.style.fontSize = DIALOGUE_CONFIG.textSize;
+    this.body.style.wordWrapWidth = Math.max(160, DIALOGUE_CONFIG.lineLength);
 
     const hasSpeaker = this.speaker.text.trim().length > 0;
     this.speaker.visible = hasSpeaker;
-    const speakerY = PADDING;
-    const bodyY = hasSpeaker ? speakerY + this.speaker.height + 8 : PADDING;
     const hasBody = this.body.text.trim().length > 0;
     this.body.visible = hasBody;
-    const cursor = hasBody ? bodyY + this.body.height + 14 : bodyY;
-    const height = cursor + this.hint.height + PADDING;
-    const x = (this.viewWidth - width) / 2;
-    const y = this.viewHeight - height - MARGIN;
 
-    this.background.clear();
-    this.background
-      .roundRect(0, 0, width, height, 8)
-      .fill({ color: 0x0c0e14, alpha: 0.9 })
-      .stroke({ color: 0xffffff, alpha: 0.16, width: 1 });
-    this.background.visible = true;
+    let cursor = 0;
+    this.speaker.position.set(0, 0);
+    if (hasSpeaker) {
+      cursor = this.speaker.height + NAME_GAP;
+    }
+    this.rule.clear();
+    this.rule.visible = hasSpeaker;
+    if (hasSpeaker) {
+      const thickness = Math.max(1, DIALOGUE_CONFIG.lineThickness);
+      this.rule
+        .rect(0, cursor, Math.max(1, DIALOGUE_CONFIG.lineLength), thickness)
+        .fill(DIALOGUE_CONFIG.lineColor);
+      cursor += thickness + TEXT_GAP;
+    }
+    this.body.position.set(0, cursor);
+    if (hasBody) {
+      cursor += this.body.height;
+    }
 
-    this.root.position.set(x, y);
-    this.speaker.position.set(PADDING, speakerY);
-    this.body.position.set(PADDING, bodyY);
-    this.hint.position.set(PADDING, hasBody ? bodyY + this.body.height + 14 : bodyY);
+    this.root.position.set(DIALOGUE_CONFIG.x, this.viewHeight - DIALOGUE_CONFIG.bottom - cursor);
   }
 
   /** Every reply is on screen. The highlighted one wears the red bar. */
   private layoutChoices(): void {
     this.speaker.visible = false;
     this.body.visible = false;
-    this.hint.visible = false;
-    this.background.visible = false;
-    this.background.clear();
+    this.rule.visible = false;
+    this.rule.clear();
 
     const width = Math.min(CHOICE_WIDTH, Math.max(320, this.viewWidth - 160));
     const gap = 22;

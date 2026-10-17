@@ -153,6 +153,11 @@ export class DialogueManager {
     this.box.resize(width, height);
   }
 
+  /** Applies live dialogue styling while a line is on screen. */
+  refresh(): void {
+    this.box.refresh();
+  }
+
   private showScripted(): void {
     const line = this.lines[this.index];
     if (!line) {

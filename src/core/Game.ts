@@ -87,6 +87,7 @@ export class Game {
       if (!this.paused) {
         this.camera.update(ticker.deltaMS);
         this.scene?.update(ticker.deltaMS);
+        this.dialogue.refresh();
         this.events.emit('update', { deltaMS: ticker.deltaMS });
       } else {
         this.blur.strength = PAUSE_CONFIG.blur;

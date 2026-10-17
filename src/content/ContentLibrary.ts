@@ -27,7 +27,7 @@ const CONTENT_ROOT = '/content';
 
 export class ContentLibrary {
   readonly levels: readonly LevelDef[];
-  /** Knot names from content/story/story.ink. A level calls one with { "dialogue": "intro" }. */
+  /** Knot names from content/story (story.ink and INCLUDE files). A level calls one with { "dialogue": "level1_stairwell" }. */
   readonly knots: readonly string[];
   /** One story for the whole game, so a fact set in a knot stays true afterwards. */
   readonly story: Story | null;
@@ -135,7 +135,7 @@ export class ContentLibrary {
           this.checkAsset(level.id, character.image, `${where}.characters[${index}].image`, problems);
         });
         if (scene.dialogue && !this.hasKnot(scene.dialogue)) {
-          problems.add(where, `dialogue "${scene.dialogue}" is not a knot in content/story/story.ink`);
+          problems.add(where, `dialogue "${scene.dialogue}" is not a knot in content/story`);
         }
         scene.onEnter.forEach((action, index) => {
           this.checkAction(level, action, `${where}.onEnter[${index}]`, problems);
@@ -160,7 +160,7 @@ export class ContentLibrary {
       return;
     }
     if (action.type === 'dialogue' && !this.hasKnot(action.id)) {
-      problems.add(where, `dialogue "${action.id}" is not a knot in content/story/story.ink`);
+      problems.add(where, `dialogue "${action.id}" is not a knot in content/story`);
       return;
     }
     if (action.type === 'go' && !level.scenes.some((scene) => scene.id === action.sceneId)) {

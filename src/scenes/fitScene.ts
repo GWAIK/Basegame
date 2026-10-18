@@ -31,6 +31,15 @@ export function fitScene(
     };
   }
 
+  if (fit === 'height') {
+    const scale = sceneHeight > 0 ? viewHeight / sceneHeight : 1;
+    return {
+      scale,
+      x: (viewWidth - sceneWidth * scale) / 2,
+      y: 0,
+    };
+  }
+
   const scale = fit === 'cover'
     ? Math.max(
       (viewWidth + (camera.maxOffsetX + SHAKE_MARGIN) * 2) / sceneWidth,

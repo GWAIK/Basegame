@@ -1,9 +1,10 @@
 /**
  * width stretches the image to the left and right edges and crops the top and bottom.
+ * height stretches it to the top and bottom edges and crops the sides.
  * cover fills the view and crops whichever side overflows.
  * contain keeps the whole image visible, at a uniform scale.
  */
-export type SceneFit = 'width' | 'cover' | 'contain';
+export type SceneFit = 'width' | 'height' | 'cover' | 'contain';
 
 /** x and y are the character's center, in pixels of the background image. */
 export interface CharacterDef {

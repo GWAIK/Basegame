@@ -1,8 +1,8 @@
 import type { Game } from '../core/Game';
 
-/** True in local development, and after Settings → Dev mode in a published build. */
+/** Off at boot. Shift+F6 toggles the editor. */
 export const devTools = {
-  enabled: import.meta.env.DEV,
+  enabled: false,
 };
 
 let editor: { show: () => void; hide: () => void } | null = null;

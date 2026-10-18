@@ -24,4 +24,4 @@ jobs:
       - name: Push to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-        run: ./butler push dist gwaik/cacophobia:html5
+        run: ./butler push dist gwaik/aminutewithiris:html5

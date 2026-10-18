@@ -13,6 +13,8 @@ export class LevelTimer {
   private readonly time: Text;
   /** Fires once, when this countdown reaches 00:00. */
   onComplete: (() => void) | null = null;
+  /** Fires when the shown time changes. previous is the value before this step. */
+  onChange: ((remaining: number, previous: number) => void) | null = null;
 
   private logic: TimerLogic | null = null;
   private remaining = 0;
@@ -21,6 +23,11 @@ export class LevelTimer {
   private completed = false;
   /** Debug hold. The clock stays on screen and does not count. */
   private held = false;
+  /** Gameplay hold. The clock stays where a story beat stopped it. */
+  private stopped = false;
+  /** Milliseconds between each second when a beat forces the clock down. */
+  private stepMS = 1000;
+  private colorOverride: string | null = null;
 
   constructor() {
     this.time = new Text({
@@ -49,6 +56,9 @@ export class LevelTimer {
     this.remaining = this.logic.startSeconds;
     this.carry = 0;
     this.completed = false;
+    this.stopped = false;
+    this.stepMS = this.logic.stepMS ?? 1000;
+    this.colorOverride = this.logic.color ?? null;
     this.time.text = formatClock(this.remaining);
     this.layout();
   }
@@ -70,21 +80,74 @@ export class LevelTimer {
     }
   }
 
+  /** Freezes the countdown for good. A new level starts it again. */
+  stop(): void {
+    this.stopped = true;
+    this.carry = 0;
+  }
+
+  /**
+   * Pins the clock on a story beat.
+   * A stalled frame can jump past the moment; this puts the digits back.
+   */
+  freezeAt(seconds: number): void {
+    this.stopped = true;
+    this.carry = 0;
+    this.remaining = Math.max(0, seconds);
+    this.time.text = formatClock(this.remaining);
+  }
+
+  /**
+   * Unfreezes the clock, turns the digits to the given color, and runs it down to 00:00.
+   * Ignores the debug hold so the beat still finishes if the timer was paused in the dock.
+   */
+  drainToZero(color: string, stepMS = 65): void {
+    if (!this.logic || !this.root.visible) {
+      return;
+    }
+    this.stopped = false;
+    this.held = false;
+    this.carry = 0;
+    this.stepMS = Math.max(16, stepMS);
+    this.colorOverride = color;
+    this.layout();
+  }
+
+  /** Drops the countdown. Reaching 00:00 ends the session the same way a natural finish does. */
+  skip(seconds: number): void {
+    if (!this.logic || !this.root.visible || this.stopped || this.remaining <= 0) {
+      return;
+    }
+    const previous = this.remaining;
+    this.remaining = Math.max(0, this.remaining - seconds);
+    this.carry = 0;
+    this.time.text = formatClock(this.remaining);
+    this.publish(previous);
+    if (this.stopped) {
+      return;
+    }
+    if (this.remaining <= 0 && !this.completed) {
+      this.completed = true;
+      this.onComplete?.();
+    }
+  }
+
   /** One second of the clock per second of play. A pause skips this. */
   update(deltaMS: number): void {
     if (!this.logic || !this.root.visible) {
       return;
     }
     this.layout();
-    if (this.held || this.remaining <= 0) {
+    if (this.held || this.stopped || this.remaining <= 0) {
       return;
     }
     this.carry += deltaMS;
-    if (this.carry < 1000) {
+    if (this.carry < this.stepMS) {
       return;
     }
-    const steps = Math.floor(this.carry / 1000);
-    this.carry -= steps * 1000;
+    const steps = Math.floor(this.carry / this.stepMS);
+    this.carry -= steps * this.stepMS;
+    const previous = this.remaining;
     for (let step = 0; step < steps; step += 1) {
       this.remaining = this.logic.tick(this.remaining);
       if (this.remaining <= 0) {
@@ -94,6 +157,10 @@ export class LevelTimer {
       }
     }
     this.time.text = formatClock(this.remaining);
+    this.publish(previous);
+    if (this.stopped) {
+      return;
+    }
     if (this.remaining <= 0 && !this.completed) {
       this.completed = true;
       this.onComplete?.();
@@ -112,9 +179,23 @@ export class LevelTimer {
   }
 
   private layout(): void {
-    this.time.style.fontSize = TIMER_CONFIG.size;
-    this.time.style.fill = TIMER_CONFIG.color;
+    const size = this.logic?.size ?? TIMER_CONFIG.size;
+    this.time.style.fontSize = size;
+    this.time.style.fill = this.colorOverride ?? this.logic?.color ?? TIMER_CONFIG.color;
+    this.time.style.letterSpacing = size > 80 ? 4 : 1;
+    if (this.logic?.place === 'center') {
+      this.time.anchor.set(0.5);
+      this.time.position.set(this.viewWidth / 2, this.viewWidth / 2);
+      return;
+    }
+    this.time.anchor.set(1, 0);
     this.time.position.set(this.viewWidth - TIMER_CONFIG.right, TIMER_CONFIG.top);
+  }
+
+  private publish(previous: number): void {
+    if (this.remaining !== previous) {
+      this.onChange?.(this.remaining, previous);
+    }
   }
 }
 

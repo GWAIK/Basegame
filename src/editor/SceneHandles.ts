@@ -148,6 +148,9 @@ export class SceneHandles {
       }
       view.position.set(text.x, text.y);
       view.style.fontSize = text.size;
+      if (view.text !== text.text) {
+        view.text = text.text;
+      }
       view.alpha = editing && sceneEditor.hidden.has(sceneItemKey('text', index)) ? 0 : 1;
     });
   }
@@ -178,7 +181,7 @@ export class SceneHandles {
     const stroke = Math.max(1, 1.5 / sceneScale);
     this.graphics
       .rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-      .stroke({ color: 0xffe14a, width: stroke, alpha: 0.95 });
+      .stroke({ color: 0x0070e0, width: stroke, alpha: 0.95 });
 
     const handles = this.handlesFor(selection);
     if (handles.length === 0) {
@@ -495,10 +498,11 @@ export class SceneHandles {
   }
 
   private toLocal(screenX: number, screenY: number): { x: number; y: number } | null {
-    if (!this.host.root.parent) {
+    const world = this.host.root.parent;
+    if (!world) {
       return null;
     }
-    return this.host.root.toLocal({ x: screenX, y: screenY });
+    return this.host.root.toLocal({ x: screenX, y: screenY }, world.parent ?? undefined);
   }
 }
 

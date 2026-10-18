@@ -28,6 +28,8 @@ export class Camera {
   private hasPointer = false;
   private suppressLook = false;
   private locked = false;
+  private zoom = 1;
+  private targetZoom = 1;
 
   constructor(
     private readonly world: Container,
@@ -74,6 +76,11 @@ export class Camera {
     this.cameraShake.shake(intensity, durationMs);
   }
 
+  /** Slowly pushes the scene in while a trigger dialogue is playing. */
+  setZoomed(zoomed: boolean): void {
+    this.targetZoom = zoomed ? Math.max(1, this.config.dialogueZoom) : 1;
+  }
+
   /** Menus use this so buttons do not slide under the pointer. */
   setLocked(locked: boolean): void {
     this.locked = locked;
@@ -94,6 +101,8 @@ export class Camera {
     this.targetMouseY = 0;
     this.mouseOffsetX = 0;
     this.mouseOffsetY = 0;
+    this.zoom = 1;
+    this.targetZoom = 1;
     this.suppressLook = true;
     this.cameraShake.stop();
     this.apply();
@@ -101,6 +110,7 @@ export class Camera {
 
   update(deltaMS: number): void {
     if (this.locked) {
+      this.world.scale.set(1);
       this.world.position.set(-this.baseX, -this.baseY);
       return;
     }
@@ -108,9 +118,15 @@ export class Camera {
     const smoothing = clamp(this.config.smoothing, 0, 1);
     const frames = deltaMS / (1000 / 60);
     const blend = 1 - Math.pow(1 - smoothing, frames);
+    const zoomSmoothing = clamp(this.config.zoomSmoothing, 0.001, 1);
+    const zoomBlend = 1 - Math.pow(1 - zoomSmoothing, frames);
 
     this.mouseOffsetX += (this.targetMouseX - this.mouseOffsetX) * blend;
     this.mouseOffsetY += (this.targetMouseY - this.mouseOffsetY) * blend;
+    this.zoom += (this.targetZoom - this.zoom) * zoomBlend;
+    if (Math.abs(this.targetZoom - this.zoom) < 0.0005) {
+      this.zoom = this.targetZoom;
+    }
     this.cameraShake.update(deltaMS, this.config.shakeDecay);
     this.headbob.update(
       deltaMS,
@@ -122,16 +138,18 @@ export class Camera {
   }
 
   private updateTarget(): void {
-    const influenceX = edgeInfluence(this.pointerX / this.viewWidth, this.config.edgeZone);
     const influenceY = edgeInfluence(this.pointerY / this.viewHeight, this.config.edgeZone);
-    this.targetMouseX = influenceX * this.config.maxOffsetX;
+    this.targetMouseX = 0;
     this.targetMouseY = influenceY * this.config.maxOffsetY;
   }
 
   private apply(): void {
     const x = this.baseX + this.mouseOffsetX + this.cameraShake.offsetX + this.headbob.offsetX;
     const y = this.baseY + this.mouseOffsetY + this.cameraShake.offsetY + this.headbob.offsetY;
-    this.world.position.set(-x, -y);
+    const zoomX = (this.viewWidth * (1 - this.zoom)) / 2;
+    const zoomY = (this.viewHeight * (1 - this.zoom)) / 2;
+    this.world.scale.set(this.zoom);
+    this.world.position.set(zoomX - x * this.zoom, zoomY - y * this.zoom);
   }
 }
 

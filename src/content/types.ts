@@ -1,8 +1,9 @@
 /**
- * cover fills the view and crops the overflow.
+ * width stretches the image to the left and right edges and crops the top and bottom.
+ * cover fills the view and crops whichever side overflows.
  * contain keeps the whole image visible, at a uniform scale.
  */
-export type SceneFit = 'cover' | 'contain';
+export type SceneFit = 'width' | 'cover' | 'contain';
 
 /** x and y are the character's center, in pixels of the background image. */
 export interface CharacterDef {
@@ -23,6 +24,8 @@ export interface AudioCue {
  * sound starts and does not wait. dialogue waits until it closes.
  * go, level, and quit end the list. dev toggles the debug tools.
  * fullscreen switches between the window and the whole screen.
+ * shop opens the menu shop.
+ * focus opens the black minute screen, then a short monologue, then the level.
  */
 export type ActionDef =
   | { type: 'sound'; file: string; volume: number }
@@ -32,17 +35,21 @@ export type ActionDef =
   | { type: 'shake'; intensity: number; durationMs: number }
   | { type: 'quit' }
   | { type: 'dev' }
-  | { type: 'fullscreen' };
+  | { type: 'fullscreen' }
+  | { type: 'shop' }
+  | { type: 'focus' };
 
 /**
  * A click box. x and y are its center, in pixels of the background.
  * A click runs its actions. A label draws a button; without one the box stays invisible.
- * The debug panel can draw every box.
+ * once removes the box after that click. The debug panel can draw every box.
  */
 export interface TriggerDef {
   id: string;
   /** Drawn as a button. Null keeps the box invisible. */
   label: string | null;
+  /** True removes the box after it runs. False leaves it in place. */
+  once: boolean;
   x: number;
   y: number;
   width: number;

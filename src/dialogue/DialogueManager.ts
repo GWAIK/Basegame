@@ -1,4 +1,5 @@
 import type { Story } from 'inkjs/compiler/Compiler';
+import type { Texture } from 'pixi.js';
 import type { DialogueBox } from './DialogueBox';
 import { isEnding, readInkLine, type InkEffect } from './inkTags';
 
@@ -23,8 +24,12 @@ export class DialogueManager {
   private pendingEnding: InkEffect | null = null;
   private choosing = false;
   private shownLine = false;
+  private portraitToken = 0;
 
-  constructor(private readonly box: DialogueBox) {
+  constructor(
+    private readonly box: DialogueBox,
+    private readonly loadPortrait: (speaker: string) => Promise<Texture | null>,
+  ) {
     this.box.hide();
   }
 
@@ -153,13 +158,34 @@ export class DialogueManager {
     this.box.resize(width, height);
   }
 
+  /** Applies live dialogue styling while a line is on screen. */
+  refresh(): void {
+    this.box.refresh();
+  }
+
+  /** Shows the line, then fills the portrait once its image has loaded. */
+  private present(speaker: string, text: string): void {
+    this.box.show(speaker, text);
+    const token = ++this.portraitToken;
+    const name = speaker.trim();
+    if (!name) {
+      return;
+    }
+    void this.loadPortrait(name).then((texture) => {
+      if (token !== this.portraitToken) {
+        return;
+      }
+      this.box.setPortrait(name, texture);
+    });
+  }
+
   private showScripted(): void {
     const line = this.lines[this.index];
     if (!line) {
       this.close();
       return;
     }
-    this.box.show(line.speaker, line.text);
+    this.present(line.speaker, line.text);
   }
 
   private advanceInk(x: number, y: number): void {
@@ -198,7 +224,7 @@ export class DialogueManager {
       if (line.text.length > 0) {
         this.pendingEnding = ending;
         this.shownLine = true;
-        this.box.show(line.speaker, line.text);
+        this.present(line.speaker, line.text);
         return;
       }
       if (ending) {

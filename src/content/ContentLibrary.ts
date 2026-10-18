@@ -27,7 +27,7 @@ const CONTENT_ROOT = '/content';
 
 export class ContentLibrary {
   readonly levels: readonly LevelDef[];
-  /** Knot names from content/story/story.ink. A level calls one with { "dialogue": "intro" }. */
+  /** Knot names from content/story (story.ink and INCLUDE files). A level calls one with { "dialogue": "level1_stairwell" }. */
   readonly knots: readonly string[];
   /** One story for the whole game, so a fact set in a knot stays true afterwards. */
   readonly story: Story | null;
@@ -104,6 +104,38 @@ export class ContentLibrary {
     return this.assets.get(contentKey(path)) ?? null;
   }
 
+  /**
+   * Portrait for a dialogue speaker.
+   * "Iris" resolves to content/shared/portraits/iris.webp (png, jpg, and jpeg too).
+   */
+  portraitUrl(speaker: string): string | null {
+    const name = speaker.trim().toLowerCase();
+    if (!name || name.includes('/') || name.includes('\\')) {
+      return null;
+    }
+    for (const ext of ['webp', 'png', 'jpg', 'jpeg']) {
+      const key = `/content/shared/portraits/${name}.${ext}`;
+      const url = this.assets.get(key) ?? this.assetIgnoringCase(key);
+      if (url) {
+        return url;
+      }
+    }
+    return null;
+  }
+
+  /** Image paths starting at content/, such as /shared/characters/ticket.webp. */
+  images(): readonly string[] {
+    const paths: string[] = [];
+    for (const key of this.assets.keys()) {
+      if (!/\.(png|jpe?g|webp|gif)$/i.test(key)) {
+        continue;
+      }
+      paths.push(key.startsWith('/content/') ? key.slice('/content'.length) : key);
+    }
+    paths.sort((a, b) => a.localeCompare(b));
+    return paths;
+  }
+
   private checkReferences(problems: ContentProblems): void {
     for (const level of this.levels) {
       const file = `content/levels/${level.id}/level.json`;
@@ -122,7 +154,7 @@ export class ContentLibrary {
           this.checkAsset(level.id, character.image, `${where}.characters[${index}].image`, problems);
         });
         if (scene.dialogue && !this.hasKnot(scene.dialogue)) {
-          problems.add(where, `dialogue "${scene.dialogue}" is not a knot in content/story/story.ink`);
+          problems.add(where, `dialogue "${scene.dialogue}" is not a knot in content/story`);
         }
         scene.onEnter.forEach((action, index) => {
           this.checkAction(level, action, `${where}.onEnter[${index}]`, problems);
@@ -147,7 +179,7 @@ export class ContentLibrary {
       return;
     }
     if (action.type === 'dialogue' && !this.hasKnot(action.id)) {
-      problems.add(where, `dialogue "${action.id}" is not a knot in content/story/story.ink`);
+      problems.add(where, `dialogue "${action.id}" is not a knot in content/story`);
       return;
     }
     if (action.type === 'go' && !level.scenes.some((scene) => scene.id === action.sceneId)) {
@@ -161,6 +193,16 @@ export class ContentLibrary {
 
   private checkAsset(levelId: string, path: string, where: string, problems: ContentProblems): void {
     this.checkKey(assetKey(levelId, path), where, problems);
+  }
+
+  private assetIgnoringCase(key: string): string | null {
+    const lower = key.toLowerCase();
+    for (const [candidate, url] of this.assets) {
+      if (candidate.toLowerCase() === lower) {
+        return url;
+      }
+    }
+    return null;
   }
 
   private checkKey(key: string, where: string, problems: ContentProblems): void {

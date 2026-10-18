@@ -22,6 +22,15 @@ export function fitScene(
   sceneHeight: number,
   camera: CameraConfig,
 ): SceneTransform {
+  if (fit === 'width') {
+    const scale = sceneWidth > 0 ? viewWidth / sceneWidth : 1;
+    return {
+      scale,
+      x: 0,
+      y: (viewHeight - sceneHeight * scale) / 2,
+    };
+  }
+
   const scale = fit === 'cover'
     ? Math.max(
       (viewWidth + (camera.maxOffsetX + SHAKE_MARGIN) * 2) / sceneWidth,

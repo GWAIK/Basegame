@@ -19,6 +19,7 @@ import { WIRELESS_MOUSE_ID } from '../shop/catalog';
 import { ShopScreen } from '../shop/ShopScreen';
 import { Wallet } from '../shop/Wallet';
 import { LevelTimer } from '../timer/LevelTimer';
+import { LoadingScreen } from '../load/LoadingScreen';
 import { EventBus } from './EventBus';
 import type { GameEvents, SceneLocation } from './GameEvents';
 import type { Scene } from './Scene';
@@ -51,6 +52,7 @@ export class Game {
   private readonly shop = new ShopScreen(this.wallet);
   private readonly focusScreen = new FocusScreen();
   private readonly popup = new Popup();
+  private loading: LoadingScreen | null = new LoadingScreen();
   private readonly blur = new BlurFilter({ strength: PAUSE_CONFIG.blur, quality: 4 });
   private readonly camera = new Camera(this.world);
   private readonly portraitCache = new Map<string, Promise<Texture | null>>();
@@ -105,7 +107,17 @@ export class Game {
 
     this.app.canvas.style.display = 'block';
     host.appendChild(this.app.canvas);
-    this.screen.addChild(this.world, this.levelTimer.root, this.shop.root, this.focusScreen.root, this.popup.root);
+    const loading = this.loading;
+    this.screen.addChild(
+      this.world,
+      this.levelTimer.root,
+      this.shop.root,
+      this.focusScreen.root,
+      this.popup.root,
+    );
+    if (loading) {
+      this.screen.addChild(loading.root);
+    }
     this.screen.mask = this.screenMask;
     this.play.addChild(this.screen, this.screenMask, this.ui);
     this.pauseLayer.addChild(this.pauseMenu.root);
@@ -155,6 +167,7 @@ export class Game {
     this.app.renderer.on('resize', () => this.handleResize());
     document.addEventListener('fullscreenchange', () => this.refreshFullscreenLabel());
     this.bindInput();
+    await this.preloadAssets();
 
     const level = this.content.level('menu') ?? this.content.firstLevel;
     if (level) {
@@ -352,6 +365,36 @@ export class Game {
     this.camera.reset();
   }
 
+  /** Decodes every image and sound before the menu appears. */
+  private async preloadAssets(): Promise<void> {
+    const files = this.content.preloadFiles();
+    const loading = this.loading;
+    loading?.setProgress(0, files.length);
+    await paintFrame();
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      if (!file) {
+        continue;
+      }
+      try {
+        if (file.kind === 'image') {
+          await this.assets.preload(file.url, file.trim);
+        } else {
+          await this.audio.preload(file.url);
+        }
+      } catch (error) {
+        console.warn(`Could not preload ${file.url}`, error);
+      }
+      loading?.setProgress(index + 1, files.length);
+      await paintFrame();
+    }
+    if (loading) {
+      this.screen.removeChild(loading.root);
+      loading.destroy();
+      this.loading = null;
+    }
+  }
+
   private handleResize(): void {
     const { width, height } = this.app.screen;
     const marginY = 36;
@@ -373,6 +416,7 @@ export class Game {
     this.shop.resize(side);
     this.focusScreen.resize(side);
     this.popup.resize(side);
+    this.loading?.resize(side);
     this.events.emit('resize', { width: side, height: side });
   }
 
@@ -854,6 +898,13 @@ function enterActions(scene: SceneDef): readonly ActionDef[] {
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
+  });
+}
+
+/** Lets the loading counter paint before the next file is decoded. */
+function paintFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
   });
 }
 

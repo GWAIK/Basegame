@@ -24,6 +24,15 @@ const assetFiles = import.meta.glob<string>(
 );
 
 const CONTENT_ROOT = '/content';
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif)$/i;
+const SOUND_FILE = /\.(mp3|ogg|wav|m4a)$/i;
+
+export interface PreloadFile {
+  url: string;
+  kind: 'image' | 'sound';
+  /** Characters crop their empty margins. Backgrounds do not. */
+  trim: boolean;
+}
 
 export class ContentLibrary {
   readonly levels: readonly LevelDef[];
@@ -121,6 +130,23 @@ export class ContentLibrary {
       }
     }
     return null;
+  }
+
+  /**
+   * Every image and sound, as the URL the build will fetch.
+   * Characters are trimmed. Backgrounds and portraits keep the full frame.
+   */
+  preloadFiles(): readonly PreloadFile[] {
+    const files: PreloadFile[] = [];
+    for (const [key, url] of this.assets) {
+      if (IMAGE_FILE.test(key)) {
+        files.push({ url, kind: 'image', trim: key.includes('/characters/') });
+      } else if (SOUND_FILE.test(key)) {
+        files.push({ url, kind: 'sound', trim: false });
+      }
+    }
+    files.sort((a, b) => a.url.localeCompare(b.url));
+    return files;
   }
 
   /** Image paths starting at content/, such as /shared/characters/ticket.webp. */

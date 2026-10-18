@@ -105,6 +105,15 @@ export class AudioPlayer {
     void this.crossfade(url, level);
   }
 
+  /**
+   * Decodes a file before it is played. Playback still waits for a click:
+   * Safari will not start audio until then.
+   */
+  preload(url: string): Promise<void> {
+    this.ensureContext();
+    return this.buffer(url).then(() => undefined);
+  }
+
   /** Plays a short sound over the bed. Before unlock(), it waits for the gesture. */
   playSound(url: string, volume: number): void {
     const cue = { url, volume: clamp01(volume) };

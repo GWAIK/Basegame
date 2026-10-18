@@ -12,6 +12,10 @@ export interface CameraConfig {
   headbobY: number;
   /** Milliseconds for one vertical bob. Horizontal sway takes twice as long. */
   headbobPeriod: number;
+  /** Scale while a trigger dialogue is open. 1 is no zoom. */
+  dialogueZoom: number;
+  /** Per-frame zoom blend at 60fps. */
+  zoomSmoothing: number;
 }
 
 export const CAMERA_CONFIG: CameraConfig = {
@@ -23,4 +27,6 @@ export const CAMERA_CONFIG: CameraConfig = {
   headbobX: 1.5,
   headbobY: 3,
   headbobPeriod: 3600,
+  dialogueZoom: 1.07,
+  zoomSmoothing: 0.03,
 };

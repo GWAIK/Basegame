@@ -2,35 +2,49 @@
   "$schema": "../../schemas/level.schema.json",
   "name": "Menu",
   "startScene": "main",
-  "ambience": { "file": "/shared/audio/ambience.wav", "volume": 0.4 },
   "scenes": {
     "main": {
       "name": "Main",
       "fit": "cover",
-      "look": false,
+      "look": true,
       "texts": [
-        { "text": "CACOPHOBIA", "x": 960, "y": 320, "size": 72 }
+        { "text": "Focus Together with Iris", "x": 960, "y": 364, "size": 48 }
       ],
       "triggers": [
         {
           "id": "play",
-          "label": "Play",
+          "once": false,
+          "label": "Start Focus",
           "x": 960,
-          "y": 560,
-          "width": 460,
-          "height": 72,
+          "y": 594,
+          "width": 340,
+          "height": 78,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
-            { "level": "level-1" }
+            { "focus": true }
+          ]
+        },
+        {
+          "id": "shop",
+          "once": false,
+          "label": "Shop",
+          "x": 968,
+          "y": 476,
+          "width": 230,
+          "height": 84,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "shop": true }
           ]
         },
         {
           "id": "settings",
+          "once": false,
           "label": "Settings",
-          "x": 960,
-          "y": 660,
-          "width": 460,
-          "height": 72,
+          "x": 908,
+          "y": 704,
+          "width": 68,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "go": "settings" }
@@ -38,11 +52,12 @@
         },
         {
           "id": "quit",
+          "once": false,
           "label": "Quit",
-          "x": 960,
-          "y": 760,
-          "width": 460,
-          "height": 72,
+          "x": 1012,
+          "y": 704,
+          "width": 68,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "quit": true }
@@ -53,45 +68,48 @@
     "settings": {
       "name": "Settings",
       "fit": "cover",
-      "look": false,
+      "look": true,
       "texts": [
-        { "text": "Settings", "x": 960, "y": 300, "size": 56 }
+        { "text": "Settings", "x": 960, "y": 364, "size": 48 }
       ],
       "triggers": [
         {
           "id": "fullscreen",
+          "once": false,
           "label": "Fullscreen: Off",
           "x": 960,
-          "y": 500,
-          "width": 460,
-          "height": 72,
+          "y": 482,
+          "width": 380,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "fullscreen": true }
           ]
         },
         {
+          "id": "dev",
+          "once": false,
+          "label": "Dev mode",
+          "x": 960,
+          "y": 574,
+          "width": 380,
+          "height": 68,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
+            { "dev": true }
+          ]
+        },
+        {
           "id": "back",
+          "once": false,
           "label": "Back",
           "x": 960,
-          "y": 620,
-          "width": 460,
+          "y": 698,
+          "width": 72,
           "height": 72,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "go": "main" }
-          ]
-        },
-        {
-          "id": "dev",
-          "label": "Dev mode",
-          "x": 960,
-          "y": 760,
-          "width": 240,
-          "height": 48,
-          "actions": [
-            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
-            { "dev": true }
           ]
         }
       ]

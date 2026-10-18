@@ -3,6 +3,7 @@ import type { TriggerDef } from '../content/types';
 import { devTools } from '../debug/devTools';
 import { setTriggerSelection, triggerDebug } from '../debug/triggerDebug';
 import { notifySceneTransform, sceneEditor, selectSceneItem } from '../editor/sceneEditor';
+import { GAME_FONTS } from '../theme/fonts';
 
 const MIN_SIZE = 32;
 const HANDLE_SCREEN = 14;
@@ -41,6 +42,8 @@ export class Triggers {
   private debugKey = '';
   private hiddenKey = '';
   private hiddenTriggerIds: ReadonlySet<string> = new Set();
+  private lockedTriggerIds: ReadonlySet<string> = new Set();
+  private spentTriggerIds: ReadonlySet<string> = new Set();
   private shown = false;
   private drawnScale = 0;
 
@@ -189,8 +192,50 @@ export class Triggers {
     this.clearSelection();
   }
 
+  /** Hides triggers that are locked by gameplay progression. */
+  setLockedTriggers(ids: ReadonlySet<string>): void {
+    this.lockedTriggerIds = ids;
+    this.invalidate();
+  }
+
+  /** Hides triggers that already ran this session. */
+  setSpentTriggers(ids: ReadonlySet<string>): void {
+    this.spentTriggerIds = ids;
+    this.invalidate();
+  }
+
+  /** A one-time trigger just ran. It no longer draws or accepts a click. */
+  consume(id: string): void {
+    if (this.spentTriggerIds.has(id)) {
+      return;
+    }
+    this.spentTriggerIds = new Set(this.spentTriggerIds).add(id);
+    this.invalidate();
+  }
+
+  /** Puts a spent trigger back, for the dev tool's one-time switch. */
+  release(id: string): void {
+    if (!this.spentTriggerIds.has(id)) {
+      return;
+    }
+    const next = new Set(this.spentTriggerIds);
+    next.delete(id);
+    this.spentTriggerIds = next;
+    this.invalidate();
+  }
+
+  private invalidate(): void {
+    this.faceKey = '';
+    this.debugKey = '';
+    if (this.shown) {
+      this.redraw(this.drawnScale || 1);
+    }
+  }
+
   private isHidden(trigger: TriggerDef): boolean {
-    return this.hiddenTriggerIds.has(trigger.id);
+    return this.lockedTriggerIds.has(trigger.id)
+      || this.hiddenTriggerIds.has(trigger.id)
+      || this.spentTriggerIds.has(trigger.id);
   }
 
   private get editing(): boolean {
@@ -198,10 +243,11 @@ export class Triggers {
   }
 
   private toLocal(screenX: number, screenY: number): { x: number; y: number } | null {
-    if (!this.root.parent) {
+    const scene = this.root.parent?.parent;
+    if (!scene) {
       return null;
     }
-    return this.root.toLocal({ x: screenX, y: screenY });
+    return this.root.toLocal({ x: screenX, y: screenY }, scene.parent?.parent ?? undefined);
   }
 
   private bodyAt(x: number, y: number): TriggerDef | null {
@@ -396,26 +442,167 @@ function cursorFor(handle: Handle): string {
 
 function drawButton(trigger: TriggerDef, hovered: boolean): Container {
   const { left, top } = edgesOf(trigger);
-  const box = new Graphics();
-  box
-    .roundRect(left, top, trigger.width, trigger.height, 2)
-    .fill({ color: hovered ? 0x1c202a : 0x0c0e14, alpha: hovered ? 0.92 : 0.78 })
-    .stroke({ color: 0xf4f1ea, width: 2, alpha: hovered ? 0.7 : 0.28 });
+  const id = trigger.id.toLowerCase();
+  const isIconOnly = Math.abs(trigger.width - trigger.height) <= 24 && trigger.width <= 120;
+  const isPrimary = id === 'play' || (trigger.label ?? '').toLowerCase().includes('focus');
 
-  const label = new Text({
-    text: trigger.label ?? '',
-    anchor: 0.5,
-    style: {
-      fill: '#f4f1ea',
-      fontFamily: 'Georgia, "Times New Roman", serif',
-      fontSize: Math.max(18, Math.min(36, trigger.height * 0.42)),
-    },
-  });
-  label.position.set(trigger.x, trigger.y);
+  if (id.includes('shop') && !isIconOnly) {
+    return drawShopWithLabel(trigger, hovered, left);
+  }
+
+  const box = new Graphics();
+  const radius = isIconOnly ? Math.min(trigger.width, trigger.height) / 2 : Math.min(38, trigger.height / 2);
+
+  if (isPrimary) {
+    box
+      .roundRect(left, top, trigger.width, trigger.height, radius)
+      .fill({ color: hovered ? 0xc86646 : 0xd97757, alpha: 1 })
+      .stroke({ color: 0xb95a3b, width: 2, alpha: hovered ? 0.65 : 0.35 });
+  } else {
+    box
+      .roundRect(left, top, trigger.width, trigger.height, radius)
+      .fill({ color: hovered ? 0xefe3d5 : 0xf7efe6, alpha: 1 })
+      .stroke({ color: hovered ? 0xd97757 : 0xdecbb8, width: 2, alpha: 0.95 });
+  }
 
   const root = new Container();
-  root.addChild(box, label);
+  root.addChild(box);
+
+  if (isIconOnly) {
+    root.addChild(drawButtonIcon(id, trigger.x, trigger.y, Math.min(trigger.width, trigger.height) * 0.24, hovered));
+    return root;
+  }
+
+  const labelText = trigger.label ?? '';
+  const label = new Text({
+    text: labelText,
+    anchor: 0.5,
+    style: {
+      fill: isPrimary ? '#fffaf5' : '#4a372d',
+      fontFamily: GAME_FONTS.cozy,
+      fontWeight: '700',
+      fontSize: Math.max(18, Math.min(30, trigger.height * 0.38)),
+      letterSpacing: 0.5,
+    },
+  });
+
+  if (isPrimary) {
+    const iconSize = Math.max(10, Math.min(15, trigger.height * 0.19));
+    const gap = 14;
+    const totalW = iconSize * 1.4 + gap + label.width;
+    const startX = trigger.x - totalW / 2;
+    const playIcon = new Graphics();
+    const ix = startX + iconSize * 0.6;
+    const iy = trigger.y;
+    playIcon
+      .poly([
+        ix - iconSize * 0.55,
+        iy - iconSize * 0.75,
+        ix + iconSize * 0.85,
+        iy,
+        ix - iconSize * 0.55,
+        iy + iconSize * 0.75,
+      ])
+      .fill({ color: 0xfffaf5 });
+    label.position.set(startX + iconSize * 1.4 + gap + label.width / 2, trigger.y);
+    root.addChild(playIcon, label);
+  } else {
+    label.position.set(trigger.x, trigger.y);
+    root.addChild(label);
+  }
+
   return root;
+}
+
+/** Circular shop button, with its name sitting to the right. The whole row stays clickable. */
+function drawShopWithLabel(trigger: TriggerDef, hovered: boolean, left: number): Container {
+  const diameter = Math.min(trigger.height, trigger.width);
+  const cx = left + diameter / 2;
+  const cy = trigger.y;
+  const plate = new Graphics();
+  plate.circle(cx, cy, diameter / 2).fill({ color: hovered ? 0xefe3d5 : 0xf7efe6 }).stroke({
+    color: hovered ? 0xd97757 : 0xdecbb8,
+    width: 2,
+  });
+  const caption = new Text({
+    text: trigger.label?.trim() || 'Shop',
+    anchor: { x: 0, y: 0.5 },
+    style: {
+      fill: '#4a372d',
+      fontFamily: GAME_FONTS.cozy,
+      fontWeight: '700',
+      fontSize: Math.max(26, Math.min(36, diameter * 0.4)),
+      letterSpacing: 0.4,
+    },
+  });
+  caption.position.set(cx + diameter / 2 + 22, cy);
+  const root = new Container();
+  root.addChild(plate, drawButtonIcon('shop', cx, cy, diameter * 0.24, hovered), caption);
+  return root;
+}
+
+function drawButtonIcon(id: string, cx: number, cy: number, r: number, hovered: boolean): Graphics {
+  const icon = new Graphics();
+  const color = hovered ? 0xd97757 : 0x5c4438;
+  const strokeWidth = Math.max(2.5, r * 0.18);
+
+  if (id.includes('setting')) {
+    const teeth = 8;
+    for (let i = 0; i < teeth; i += 1) {
+      const angle = (i * Math.PI * 2) / teeth;
+      const x1 = cx + Math.cos(angle) * (r * 0.72);
+      const y1 = cy + Math.sin(angle) * (r * 0.72);
+      const x2 = cx + Math.cos(angle) * (r * 1.08);
+      const y2 = cy + Math.sin(angle) * (r * 1.08);
+      icon.moveTo(x1, y1).lineTo(x2, y2).stroke({ color, width: strokeWidth * 1.15, cap: 'round' });
+    }
+    icon.circle(cx, cy, r * 0.76).fill({ color: hovered ? 0xefe3d5 : 0xf7efe6 }).stroke({ color, width: strokeWidth });
+    icon.circle(cx, cy, r * 0.32).stroke({ color, width: strokeWidth });
+    return icon;
+  }
+
+  if (id.includes('shop')) {
+    icon.roundRect(cx - r * 0.62, cy - r * 0.2, r * 1.24, r * 1.05, r * 0.22).stroke({ color, width: strokeWidth });
+    icon
+      .moveTo(cx - r * 0.34, cy - r * 0.2)
+      .arc(cx, cy - r * 0.2, r * 0.34, Math.PI, 0)
+      .stroke({ color, width: strokeWidth, cap: 'round' });
+    return icon;
+  }
+
+  if (id.includes('quit') || id.includes('power') || id.includes('exit')) {
+    const a0 = -Math.PI * 0.22;
+    const a1 = Math.PI * 1.22;
+    icon
+      .moveTo(cx + Math.cos(a0) * r * 0.82, cy + r * 0.06 + Math.sin(a0) * r * 0.82)
+      .arc(cx, cy + r * 0.06, r * 0.82, a0, a1)
+      .stroke({
+        color,
+        width: strokeWidth,
+        cap: 'round',
+      });
+    icon
+      .moveTo(cx, cy - r * 0.95)
+      .lineTo(cx, cy - r * 0.1)
+      .stroke({ color, width: strokeWidth, cap: 'round' });
+    return icon;
+  }
+
+  if (id.includes('back')) {
+    icon
+      .moveTo(cx + r * 0.55, cy)
+      .lineTo(cx - r * 0.55, cy)
+      .moveTo(cx - r * 0.1, cy - r * 0.5)
+      .lineTo(cx - r * 0.6, cy)
+      .lineTo(cx - r * 0.1, cy + r * 0.5)
+      .stroke({ color, width: strokeWidth, cap: 'round', join: 'round' });
+    return icon;
+  }
+
+  icon
+    .poly([cx - r * 0.45, cy - r * 0.65, cx + r * 0.75, cy, cx - r * 0.45, cy + r * 0.65])
+    .fill({ color });
+  return icon;
 }
 
 function drawTrigger(trigger: TriggerDef, selected: boolean, sceneScale: number): Container {

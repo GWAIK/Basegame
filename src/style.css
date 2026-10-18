@@ -5,7 +5,14 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0b0c10;
+  background: #000;
+}
+
+/* The game is a square, like a screen. The rest of the window stays black. */
+#app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .lil-gui {
@@ -508,6 +515,16 @@ body,
 .editor-search,
 .editor-nav select {
   user-select: text;
+}
+
+.editor-check {
+  grid-template-columns: 1fr auto;
+}
+
+.editor-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0070e0;
 }
 
 .editor-field input[type='color'] {

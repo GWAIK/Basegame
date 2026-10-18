@@ -8,6 +8,7 @@ import { Scene } from '../core/Scene';
 import { devTools } from '../debug/devTools';
 import { SceneHandles } from '../editor/SceneHandles';
 import { Triggers } from '../triggers/Triggers';
+import { GAME_FONTS } from '../theme/fonts';
 import { fitScene } from './fitScene';
 
 const PLACEHOLDER_WIDTH = 1920;
@@ -19,6 +20,7 @@ const PLACEHOLDER_HEIGHT = 1080;
  * their spot in the picture at any window size.
  */
 export class StageScene extends Scene {
+  readonly definition: SceneDef;
   private readonly animations: AnimatedWebp[] = [];
   private sceneWidth = PLACEHOLDER_WIDTH;
   private sceneHeight = PLACEHOLDER_HEIGHT;
@@ -26,20 +28,27 @@ export class StageScene extends Scene {
   private readonly characterViews: Container[] = [];
   private readonly textViews: Text[] = [];
   private readonly handles: SceneHandles | null;
+  private readonly compactMenu: boolean;
 
   constructor(
     readonly level: LevelDef,
-    readonly definition: SceneDef,
+    definition: SceneDef,
     private readonly content: ContentLibrary,
     private readonly assets: AssetLoader,
+    shopUnlocked = true,
   ) {
     super();
-    this.root.label = `scene:${level.id}/${definition.id}`;
-    this.triggers = new Triggers(definition.triggers);
+    this.compactMenu = level.id === 'menu' && definition.id === 'main' && !shopUnlocked;
+    this.definition = this.compactMenu ? compactMainMenu(definition) : definition;
+    this.root.label = `scene:${level.id}/${this.definition.id}`;
+    this.triggers = new Triggers(this.definition.triggers);
+    if (this.compactMenu) {
+      this.triggers.setLockedTriggers(new Set(['shop']));
+    }
     this.foregroundLayer.addChild(this.triggers.root);
     this.handles = devTools.enabled
       ? new SceneHandles({
-          scene: definition,
+          scene: this.definition,
           root: this.root,
           background: this.backgroundLayer,
           characters: this.characterViews,
@@ -56,6 +65,19 @@ export class StageScene extends Scene {
   /** What a trigger click does. The box itself lives in Triggers. */
   setTriggerHandler(handler: (trigger: TriggerDef) => void): void {
     this.triggers.onActivate = handler;
+  }
+
+  /** One-time triggers that already ran before this scene was opened. */
+  setSpentTriggers(ids: ReadonlySet<string>): void {
+    this.triggers.setSpentTriggers(ids);
+  }
+
+  consumeTrigger(id: string): void {
+    this.triggers.consume(id);
+  }
+
+  releaseTrigger(id: string): void {
+    this.triggers.release(id);
   }
 
   get dimensions(): { width: number; height: number } {
@@ -146,7 +168,7 @@ export class StageScene extends Scene {
 
   private addBackground(image: LoadedImage | null): void {
     if (!image) {
-      this.backgroundLayer.addChild(createBackgroundPlaceholder());
+      this.backgroundLayer.addChild(createBackgroundPlaceholder(this.level.id === 'menu', this.compactMenu));
       return;
     }
 
@@ -159,10 +181,11 @@ export class StageScene extends Scene {
     if (this.definition.texts.length === 0) {
       return;
     }
+    const isMenu = this.level.id === 'menu';
     const layer = new Container();
     layer.label = 'texts';
     for (const item of this.definition.texts) {
-      const text = createSceneText(item);
+      const text = createSceneText(item, isMenu);
       this.textViews.push(text);
       layer.addChild(text);
     }
@@ -194,22 +217,68 @@ export class StageScene extends Scene {
   }
 }
 
-function createBackgroundPlaceholder(): Graphics {
-  const placeholder = new Graphics();
-  placeholder.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(0x10131a);
-  return placeholder;
+function compactMainMenu(scene: SceneDef): SceneDef {
+  return {
+    ...scene,
+    texts: scene.texts.map((text) => ({
+      ...text,
+      y: text.y + 56,
+    })),
+    triggers: scene.triggers.map((trigger) => ({
+      ...trigger,
+      y: trigger.id === 'shop' ? trigger.y : trigger.y - 56,
+    })),
+  };
 }
 
-function createSceneText(item: TextDef): Text {
+function createBackgroundPlaceholder(isMenu: boolean, compactMenu: boolean): Container {
+  const root = new Container();
+  const base = new Graphics();
+  base.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(isMenu ? 0xf6efe6 : 0x10131a);
+  root.addChild(base);
+
+  if (isMenu) {
+    const glow = new Graphics();
+    glow.circle(960, 540, 440).fill({ color: 0xefe2d1, alpha: 0.78 });
+    glow.circle(960, 538, 290).fill({ color: 0xfbf7f2, alpha: 0.68 });
+
+    const cardWidth = 640;
+    const cardTop = compactMenu ? 340 : 284;
+    const cardHeight = compactMenu ? 396 : 508;
+    const dividerY = compactMenu ? 472 : 414;
+
+    const shadow = new Graphics();
+    shadow.roundRect(960 - cardWidth / 2, cardTop + 8, cardWidth, cardHeight, 44).fill({
+      color: 0xd8c3ad,
+      alpha: 0.32,
+    });
+
+    const card = new Graphics();
+    card
+      .roundRect(960 - cardWidth / 2, cardTop, cardWidth, cardHeight, 44)
+      .fill({ color: 0xfffbf7, alpha: 0.98 })
+      .stroke({ color: 0xe6d6c5, width: 2.5, alpha: 0.95 });
+
+    const divider = new Graphics();
+    divider.roundRect(960 - 56, dividerY, 112, 3, 1.5).fill({ color: 0xe6d6c5, alpha: 0.9 });
+
+    root.addChild(glow, shadow, card, divider);
+  }
+  return root;
+}
+
+function createSceneText(item: TextDef, isMenu: boolean): Text {
+  const isTimer = /^\d{2}:\d{2}$/.test(item.text.trim());
   const text = new Text({
     text: item.text,
     anchor: 0.5,
     style: {
-      fill: '#f4f1ea',
-      fontFamily: 'Georgia, "Times New Roman", serif',
+      fill: isMenu ? (isTimer ? '#3d2e26' : '#4a372d') : '#f4ebe1',
+      fontFamily: isTimer ? GAME_FONTS.mono : item.size >= 40 ? GAME_FONTS.display : GAME_FONTS.cozy,
+      fontWeight: isTimer || item.size >= 40 ? '700' : '600',
       fontSize: item.size,
       align: 'center',
-      letterSpacing: item.size >= 48 ? 6 : 0.4,
+      letterSpacing: isTimer ? 4 : item.size >= 40 ? 0.6 : 0.4,
     },
   });
   text.position.set(item.x, item.y);

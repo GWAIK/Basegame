@@ -2,11 +2,11 @@
   "$schema": "../../schemas/level.schema.json",
   "name": "Level 2",
   "startScene": "roof",
-  "ambience": { "file": "/shared/audio/room.wav", "volume": 0.55 },
+  "ambience": { "file": "/shared/audio/bg_chill_guitar.wav", "volume": 0.5 },
   "scenes": {
     "roof": {
       "name": "Roof",
-      "fit": "cover",
+      "fit": "width",
       "background": "/shared/backgrounds/BG1_test.webp",
       "dialogue": "level2_roof",
       "onEnter": [

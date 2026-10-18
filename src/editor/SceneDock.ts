@@ -2,6 +2,7 @@ import type { SceneDef } from '../content/types';
 import { createDialogueBuilderWindow } from './DialogueBuilderWindow';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import { DIALOGUE_CONFIG } from '../dialogue/DialogueConfig';
+import { TIMER_CONFIG } from '../timer/TimerConfig';
 import type { Game } from '../core/Game';
 import { devTools } from '../debug/devTools';
 import { triggerDebug } from '../debug/triggerDebug';
@@ -151,6 +152,7 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
   let syncing = false;
   let cameraOpen = false;
   let dialogueStyleOpen = false;
+  let timerOpen = false;
 
   const closeMenu = () => {
     menu.hidden = true;
@@ -201,7 +203,10 @@ export function createSceneDock(game: Game): { show: () => void; hide: () => voi
     }, cameraOpen, () => {
       dialogueStyleOpen = !dialogueStyleOpen;
       redraw();
-    }, dialogueStyleOpen));
+    }, dialogueStyleOpen, () => {
+      timerOpen = !timerOpen;
+      redraw();
+    }, timerOpen));
   };
 
   hideButton.addEventListener('click', () => {
@@ -534,17 +539,19 @@ function renderDetails(
   cameraOpen: boolean,
   toggleDialogue: () => void,
   dialogueOpen: boolean,
+  toggleTimer: () => void,
+  timerOpen: boolean,
 ): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const selection = sceneEditor.selected;
   if (!selection) {
-    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen));
+    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen, toggleTimer, timerOpen));
     return fragment;
   }
 
   const row = rowsFor(scene, selection.kind)[selection.index];
   if (!row) {
-    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen));
+    fragment.append(renderWorld(game, scene, toggleCamera, cameraOpen, toggleDialogue, dialogueOpen, toggleTimer, timerOpen));
     return fragment;
   }
 
@@ -619,6 +626,10 @@ function renderDetails(
     fragment.append(textField('Label', 'label', trigger.label ?? '', (value) => {
       trigger.label = value.length > 0 ? value : null;
     }));
+    fragment.append(checkField('One time', trigger.once, (value) => {
+      game.setTriggerOnce(trigger, value);
+      notifySceneTransform();
+    }));
     fragment.append(category('Transform'));
     fragment.append(numberField('X', 'x', trigger.x, (value) => {
       trigger.x = value;
@@ -645,6 +656,8 @@ function renderWorld(
   cameraOpen: boolean,
   toggleDialogue: () => void,
   dialogueOpen: boolean,
+  toggleTimer: () => void,
+  timerOpen: boolean,
 ): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const name = document.createElement('p');
@@ -654,22 +667,6 @@ function renderWorld(
   kind.className = 'editor-kind';
   kind.textContent = 'Scene';
   fragment.append(name, kind);
-
-  fragment.append(category('Scene'));
-  const look = document.createElement('label');
-  look.className = 'editor-check';
-  const lookBox = document.createElement('input');
-  lookBox.type = 'checkbox';
-  lookBox.checked = scene.look;
-  lookBox.addEventListener('change', () => {
-    scene.look = lookBox.checked;
-    const location = game.location;
-    if (location) {
-      void game.goTo(location.levelId, location.sceneId);
-    }
-  });
-  look.append(lookBox, document.createTextNode('Look'));
-  fragment.append(look);
 
   fragment.append(category('Audio'));
   const volume = rangeField('Master', 1, 0, 1, 0.01, (value) => game.setMasterVolume(value));
@@ -699,27 +696,93 @@ function renderWorld(
   dialogue.addEventListener('click', toggleDialogue);
   fragment.append(dialogue);
   if (dialogueOpen) {
-    fragment.append(rangeField('Name', DIALOGUE_CONFIG.nameSize, 12, 96, 1, (value) => {
+    const values = document.createElement('textarea');
+    values.className = 'editor-values';
+    values.readOnly = true;
+    values.rows = 10;
+    const refreshValues = () => {
+      values.value = dialogueSnippet();
+    };
+    const write = (apply: (value: number) => void) => (value: number) => {
+      apply(value);
+      refreshValues();
+    };
+    fragment.append(rangeField('Name', DIALOGUE_CONFIG.nameSize, 12, 96, 1, write((value) => {
       DIALOGUE_CONFIG.nameSize = value;
-    }));
-    fragment.append(rangeField('Text', DIALOGUE_CONFIG.textSize, 12, 72, 1, (value) => {
+    })));
+    fragment.append(rangeField('Text', DIALOGUE_CONFIG.textSize, 12, 72, 1, write((value) => {
       DIALOGUE_CONFIG.textSize = value;
-    }));
-    fragment.append(rangeField('X', DIALOGUE_CONFIG.x, 0, 1200, 1, (value) => {
-      DIALOGUE_CONFIG.x = value;
-    }));
-    fragment.append(rangeField('Bottom', DIALOGUE_CONFIG.bottom, 0, 800, 1, (value) => {
+    })));
+    fragment.append(rangeField('Bottom', DIALOGUE_CONFIG.bottom, 0, 800, 1, write((value) => {
       DIALOGUE_CONFIG.bottom = value;
-    }));
+    })));
     fragment.append(colorField('Line', DIALOGUE_CONFIG.lineColor, (value) => {
       DIALOGUE_CONFIG.lineColor = value;
+      refreshValues();
     }));
-    fragment.append(rangeField('Thick', DIALOGUE_CONFIG.lineThickness, 1, 24, 1, (value) => {
+    fragment.append(rangeField('Thick', DIALOGUE_CONFIG.lineThickness, 1, 24, 1, write((value) => {
       DIALOGUE_CONFIG.lineThickness = value;
-    }));
-    fragment.append(rangeField('Length', DIALOGUE_CONFIG.lineLength, 40, 1600, 1, (value) => {
+    })));
+    fragment.append(rangeField('Length', DIALOGUE_CONFIG.lineLength, 40, 1600, 1, write((value) => {
       DIALOGUE_CONFIG.lineLength = value;
+    })));
+    refreshValues();
+    fragment.append(copyButton('Copy values', dialogueSnippet, () => {
+      values.focus();
+      values.select();
     }));
+    fragment.append(values);
+  }
+
+  const timer = document.createElement('button');
+  timer.type = 'button';
+  timer.className = 'editor-category';
+  timer.textContent = `${timerOpen ? '▾' : '▸'}  Timer`;
+  timer.addEventListener('click', toggleTimer);
+  fragment.append(timer);
+  if (timerOpen) {
+    const hold = document.createElement('button');
+    hold.type = 'button';
+    hold.className = 'editor-copy';
+    const refreshHold = () => {
+      hold.textContent = game.isTimerHeld ? 'Resume timer' : 'Pause timer';
+    };
+    refreshHold();
+    hold.addEventListener('click', () => {
+      game.holdTimer(!game.isTimerHeld);
+      refreshHold();
+    });
+    fragment.append(hold);
+    const values = document.createElement('textarea');
+    values.className = 'editor-values';
+    values.readOnly = true;
+    values.rows = 7;
+    const refreshValues = () => {
+      values.value = timerSnippet();
+    };
+    const write = (apply: (value: number) => void) => (value: number) => {
+      apply(value);
+      refreshValues();
+    };
+    fragment.append(rangeField('Size', TIMER_CONFIG.size, 10, 96, 1, write((value) => {
+      TIMER_CONFIG.size = value;
+    })));
+    fragment.append(rangeField('Top', TIMER_CONFIG.top, 0, 800, 1, write((value) => {
+      TIMER_CONFIG.top = value;
+    })));
+    fragment.append(rangeField('Right', TIMER_CONFIG.right, 0, 800, 1, write((value) => {
+      TIMER_CONFIG.right = value;
+    })));
+    fragment.append(colorField('Color', TIMER_CONFIG.color, (value) => {
+      TIMER_CONFIG.color = value;
+      refreshValues();
+    }));
+    refreshValues();
+    fragment.append(copyButton('Copy values', timerSnippet, () => {
+      values.focus();
+      values.select();
+    }));
+    fragment.append(values);
   }
 
   const camera = document.createElement('button');
@@ -789,6 +852,19 @@ function imageField(game: Game, label: string, current: string, onChange: (path:
   select.value = current;
   select.addEventListener('change', () => onChange(select.value));
   field.append(caption, select);
+  return field;
+}
+
+function checkField(label: string, checked: boolean, onChange: (value: boolean) => void): HTMLLabelElement {
+  const field = document.createElement('label');
+  field.className = 'editor-field editor-check';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  field.append(caption, input);
   return field;
 }
 
@@ -911,6 +987,56 @@ function valuesBlock(scene: SceneDef, selection: SceneSelection): DocumentFragme
   });
   fragment.append(copy, values);
   return fragment;
+}
+
+/** Current Dialogue sliders, ready to paste back into the game. */
+function dialogueSnippet(): string {
+  return `Dialogue\n${JSON.stringify({
+    nameSize: DIALOGUE_CONFIG.nameSize,
+    textSize: DIALOGUE_CONFIG.textSize,
+    bottom: DIALOGUE_CONFIG.bottom,
+    lineColor: DIALOGUE_CONFIG.lineColor,
+    lineThickness: DIALOGUE_CONFIG.lineThickness,
+    lineLength: DIALOGUE_CONFIG.lineLength,
+    portraitSize: DIALOGUE_CONFIG.portraitSize,
+    portraitGap: DIALOGUE_CONFIG.portraitGap,
+  }, null, 2)}`;
+}
+
+function timerSnippet(): string {
+  return `Timer\n${JSON.stringify({
+    size: TIMER_CONFIG.size,
+    top: TIMER_CONFIG.top,
+    right: TIMER_CONFIG.right,
+    color: TIMER_CONFIG.color,
+  }, null, 2)}`;
+}
+
+function copyButton(label: string, text: () => string, onFail: () => void): HTMLButtonElement {
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'editor-copy';
+  copy.textContent = label;
+  copy.addEventListener('click', () => {
+    const snippet = text();
+    void navigator.clipboard.writeText(snippet).then(
+      () => {
+        copy.textContent = 'Copied';
+        window.setTimeout(() => {
+          copy.textContent = label;
+        }, 1200);
+      },
+      () => {
+        onFail();
+        copy.textContent = 'Select the text';
+        window.setTimeout(() => {
+          copy.textContent = label;
+        }, 1600);
+      },
+    );
+    blurFocus();
+  });
+  return copy;
 }
 
 function actionButton(label: string, onClick: () => void): HTMLButtonElement {

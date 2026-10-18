@@ -87,24 +87,11 @@
           ]
         },
         {
-          "id": "dev",
-          "once": false,
-          "label": "Dev mode",
-          "x": 960,
-          "y": 574,
-          "width": 380,
-          "height": 68,
-          "actions": [
-            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
-            { "dev": true }
-          ]
-        },
-        {
           "id": "back",
           "once": false,
           "label": "Back",
           "x": 960,
-          "y": 698,
+          "y": 598,
           "width": 72,
           "height": 72,
           "actions": [

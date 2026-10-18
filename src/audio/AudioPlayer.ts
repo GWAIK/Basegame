@@ -4,6 +4,7 @@ const MAX_QUEUED_SOUNDS = 8;
 interface Cue {
   url: string;
   volume: number;
+  fadeInSeconds?: number;
 }
 
 interface PlayingBed {
@@ -85,10 +86,11 @@ export class AudioPlayer {
    * Fades to a looping bed. The same file keeps playing.
    * Pass null to fade the bed out. Before unlock(), the request waits.
    */
-  playAmbience(url: string | null, volume: number): void {
+  playAmbience(url: string | null, volume: number, fadeInSeconds = FADE_SECONDS): void {
     const level = clamp01(volume);
+    const fadeIn = Math.max(0.05, fadeInSeconds);
     if (!this.isRunning()) {
-      this.pendingAmbience = url === null ? null : { url, volume: level };
+      this.pendingAmbience = url === null ? null : { url, volume: level, fadeInSeconds: fadeIn };
       return;
     }
     if (url === null) {
@@ -99,10 +101,10 @@ export class AudioPlayer {
     }
     if (this.ambience?.url === url) {
       this.ambienceToken += 1;
-      this.ramp(this.ambience.gain, level);
+      this.ramp(this.ambience.gain, level, fadeIn);
       return;
     }
-    void this.crossfade(url, level);
+    void this.crossfade(url, level, fadeIn);
   }
 
   /**
@@ -127,14 +129,16 @@ export class AudioPlayer {
     void this.startSound(cue);
   }
 
-  private async crossfade(url: string, volume: number): Promise<void> {
+  private async crossfade(url: string, volume: number, fadeInSeconds: number): Promise<void> {
     const token = ++this.ambienceToken;
+    this.fadeOut(this.ambience);
+    this.ambience = null;
     const buffer = await this.buffer(url);
     if (token !== this.ambienceToken || !this.context || !this.master) {
       return;
     }
     if (!buffer || this.context.state !== 'running') {
-      this.pendingAmbience = { url, volume };
+      this.pendingAmbience = { url, volume, fadeInSeconds };
       return;
     }
 
@@ -144,12 +148,10 @@ export class AudioPlayer {
     source.loop = true;
     const gain = this.context.createGain();
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(volume, now + FADE_SECONDS);
+    gain.gain.linearRampToValueAtTime(volume, now + fadeInSeconds);
     source.connect(gain);
     gain.connect(this.master);
     source.start(now);
-
-    this.fadeOut(this.ambience);
     this.ambience = { url, source, gain };
   }
 
@@ -158,7 +160,7 @@ export class AudioPlayer {
       return;
     }
     const now = this.context.currentTime;
-    this.ramp(bed.gain, 0);
+    this.ramp(bed.gain, 0, FADE_SECONDS);
     const source = bed.source;
     source.stop(now + FADE_SECONDS + 0.05);
     source.onended = () => {
@@ -167,14 +169,14 @@ export class AudioPlayer {
     };
   }
 
-  private ramp(gain: GainNode, value: number): void {
+  private ramp(gain: GainNode, value: number, seconds: number): void {
     if (!this.context) {
       return;
     }
     const now = this.context.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(value, now + FADE_SECONDS);
+    gain.gain.linearRampToValueAtTime(value, now + seconds);
   }
 
   private async startSound(cue: Cue): Promise<void> {
@@ -247,7 +249,7 @@ export class AudioPlayer {
     const ambience = this.pendingAmbience;
     this.pendingAmbience = null;
     if (ambience) {
-      this.playAmbience(ambience.url, ambience.volume);
+      this.playAmbience(ambience.url, ambience.volume, ambience.fadeInSeconds);
     }
     const sounds = this.pendingSounds.splice(0);
     for (const sound of sounds) {

@@ -36,9 +36,9 @@
           "description": "Label shown in tools. Defaults to the scene id."
         },
         "fit": {
-          "enum": ["width", "cover", "contain"],
+          "enum": ["width", "height", "cover", "contain"],
           "default": "cover",
-          "description": "width touches the left and right edges and crops the top and bottom. cover fills the screen and crops the overflow. contain shows the whole image with bars around it."
+          "description": "width touches the left and right edges and crops the top and bottom. height touches the top and bottom and crops the sides. cover fills the screen and crops the overflow. contain shows the whole image with bars around it."
         },
         "look": {
           "type": "boolean",

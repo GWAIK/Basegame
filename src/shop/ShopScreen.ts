@@ -232,11 +232,28 @@ export class ShopScreen {
     content.addChild(heading);
     let cursor = y + 24;
     const rowWidth = this.side - pad * 2 - 32;
-    for (const item of SHOP_ITEMS.filter((entry) => entry.kind === kind)) {
+    const items = SHOP_ITEMS.filter((entry) => entry.kind === kind);
+    if (items.length === 0) {
+      this.addComingSoon(content, cursor, rowWidth);
+      return cursor + 58;
+    }
+    for (const item of items) {
       this.addRow(content, item, cursor, rowWidth);
       cursor += 58;
     }
     return cursor;
+  }
+
+  private addComingSoon(content: Container, y: number, width: number): void {
+    const row = new Graphics();
+    row.roundRect(0, y, width, 52, 14).fill({ color: 0xf7efe6 }).stroke({ color: LINE, width: 1.5 });
+    const label = new Text({
+      text: 'Coming soon',
+      style: { fill: '#a89280', fontFamily: GAME_FONTS.cozy, fontWeight: '600', fontSize: 16 },
+    });
+    label.anchor.set(0.5);
+    label.position.set(width / 2, y + 26);
+    content.addChild(row, label);
   }
 
   private addRow(content: Container, item: ShopItem, y: number, width: number): void {

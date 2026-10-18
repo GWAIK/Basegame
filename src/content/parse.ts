@@ -44,7 +44,7 @@ const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
 const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen', 'shop', 'focus'] as const;
 const DEFAULT_TEXT_SIZE = 32;
-const FITS: readonly SceneFit[] = ['width', 'cover', 'contain'];
+const FITS: readonly SceneFit[] = ['width', 'height', 'cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
 const DEFAULT_SHAKE_MS = 300;
 

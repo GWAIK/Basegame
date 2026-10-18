@@ -3,7 +3,7 @@ import type { AnimatedWebp } from '../animation/AnimatedWebp';
 import type { AssetLoader, LoadedImage } from '../assets/AssetLoader';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { CharacterDef, LevelDef, SceneDef, TextDef, TriggerDef } from '../content/types';
+import type { CharacterDef, LevelDef, SceneDef, SceneFit, TextDef, TriggerDef } from '../content/types';
 import { Scene } from '../core/Scene';
 import { devTools } from '../debug/devTools';
 import { SceneHandles } from '../editor/SceneHandles';
@@ -29,6 +29,9 @@ export class StageScene extends Scene {
   private readonly textViews: Text[] = [];
   private readonly handles: SceneHandles | null;
   private readonly compactMenu: boolean;
+  private lookSlideX = 0;
+  private fitMode: SceneFit;
+  private backgroundPath: string | null;
 
   constructor(
     readonly level: LevelDef,
@@ -40,6 +43,8 @@ export class StageScene extends Scene {
     super();
     this.compactMenu = level.id === 'menu' && definition.id === 'main' && !shopUnlocked;
     this.definition = this.compactMenu ? compactMainMenu(definition) : definition;
+    this.fitMode = this.definition.fit;
+    this.backgroundPath = this.definition.background;
     this.root.label = `scene:${level.id}/${this.definition.id}`;
     this.triggers = new Triggers(this.definition.triggers);
     if (this.compactMenu) {
@@ -82,6 +87,15 @@ export class StageScene extends Scene {
 
   get dimensions(): { width: number; height: number } {
     return { width: this.sceneWidth, height: this.sceneHeight };
+  }
+
+  /** Extra screen-space shift for a Teleforum look. Cleared when the still settles. */
+  setLookSlide(x: number): void {
+    this.lookSlideX = x;
+  }
+
+  get currentBackground(): string | null {
+    return this.backgroundPath;
   }
 
   async load(): Promise<void> {
@@ -177,6 +191,20 @@ export class StageScene extends Scene {
     this.backgroundLayer.addChild(new Sprite(image.texture));
   }
 
+  /** Swaps the picture in place. The scene keeps its size when the new image matches. */
+  async replaceBackground(path: string, fit?: SceneFit): Promise<void> {
+    const image = await this.loadImage(path, false);
+    if (this.destroyed || !image) {
+      return;
+    }
+    this.backgroundPath = path;
+    this.fitMode = fit ?? this.definition.fit;
+    const previous = this.backgroundLayer.removeChildren();
+    this.addBackground(image);
+    previous.forEach((child) => child.destroy());
+    this.layout();
+  }
+
   private addTexts(): void {
     if (this.definition.texts.length === 0) {
       return;
@@ -205,7 +233,7 @@ export class StageScene extends Scene {
 
   private layout(): void {
     const transform = fitScene(
-      this.definition.fit,
+      this.fitMode,
       this.viewWidth,
       this.viewHeight,
       this.sceneWidth,
@@ -213,7 +241,7 @@ export class StageScene extends Scene {
       CAMERA_CONFIG,
     );
     this.root.scale.set(transform.scale);
-    this.root.position.set(transform.x, transform.y);
+    this.root.position.set(transform.x + this.lookSlideX, transform.y);
   }
 }
 

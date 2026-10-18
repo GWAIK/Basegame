@@ -44,6 +44,29 @@ interface WebpFrame {
   data: Uint8Array;
 }
 
+/** True when the file has an animation chunk. A still WebP returns false. */
+export function webpIsAnimated(buffer: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 12 || tagAt(bytes, 0) !== 'RIFF' || tagAt(bytes, 8) !== 'WEBP') {
+    return false;
+  }
+
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const tag = tagAt(bytes, offset);
+    const size = readU32(bytes, offset + 4);
+    if (tag === 'ANIM' || tag === 'ANMF') {
+      return true;
+    }
+    const end = offset + 8 + size;
+    if (end > bytes.length) {
+      break;
+    }
+    offset = end + (size & 1);
+  }
+  return false;
+}
+
 /** Returns null when the file is missing frames or is a still image. */
 export function openChunkDecoder(buffer: ArrayBuffer): FrameDecoder | null {
   const parsed = parseAnimatedWebp(buffer);

@@ -2,7 +2,6 @@
   "$schema": "../../schemas/level.schema.json",
   "name": "Menu",
   "startScene": "main",
-  "ambience": { "file": "/shared/audio/ambience.wav", "volume": 0.4 },
   "scenes": {
     "main": {
       "name": "Main",

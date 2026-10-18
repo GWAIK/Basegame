@@ -1,23 +1,28 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { DIALOGUE_CONFIG } from './DialogueConfig';
 
 const CHOICE_WIDTH = 820;
 const CHOICE_RED = 0xb01e2c;
-const NAME_GAP = 8;
-const TEXT_GAP = 10;
+const NAME_GAP = 10;
+const TEXT_GAP = 12;
 
 /**
  * Screen-space dialogue. Parent it to the UI layer, not the camera world.
- * A spoken line is a name, a rule, and the text, with no plate behind them.
+ * A spoken line is a portrait, a name, a rule, and the text, with no plate behind the words.
  * Choices stay as their own list. The game hit-tests them from the click position.
  */
 export class DialogueBox {
   private readonly root = new Container();
+  private readonly portrait = new Container();
+  private readonly portraitFrame = new Graphics();
+  private readonly portraitMask = new Graphics();
+  private readonly portraitSprite = new Sprite(Texture.EMPTY);
   private readonly rule = new Graphics();
   private readonly speaker: Text;
   private readonly body: Text;
   private readonly choiceRows: Container[] = [];
   private selectedChoice = 0;
+  private portraitKey = '';
   private viewWidth = 800;
   private viewHeight = 600;
 
@@ -44,14 +49,42 @@ export class DialogueBox {
       },
     });
 
-    this.root.addChild(this.speaker, this.rule, this.body);
+    this.portraitSprite.anchor.set(0.5);
+    this.portraitSprite.visible = false;
+    this.portraitSprite.mask = this.portraitMask;
+    this.portrait.addChild(this.portraitFrame, this.portraitSprite, this.portraitMask);
+    this.portrait.visible = false;
+    this.portrait.eventMode = 'none';
+
+    this.root.addChild(this.portrait, this.speaker, this.rule, this.body);
     this.root.visible = false;
     this.root.eventMode = 'none';
     ui.addChild(this.root);
   }
 
+  /**
+   * Fills the square for the line currently on screen.
+   * A late load for a previous speaker is ignored.
+   */
+  setPortrait(speaker: string, texture: Texture | null): void {
+    if (speaker.trim().toLowerCase() !== this.portraitKey) {
+      return;
+    }
+    this.portraitSprite.texture = texture ?? Texture.EMPTY;
+    this.portraitSprite.visible = texture !== null;
+    if (this.root.visible) {
+      this.layout();
+    }
+  }
+
   show(speaker: string, text: string): void {
     this.clearChoices();
+    const key = speaker.trim().toLowerCase();
+    if (key !== this.portraitKey) {
+      this.portraitKey = key;
+      this.portraitSprite.texture = Texture.EMPTY;
+      this.portraitSprite.visible = false;
+    }
     this.speaker.text = speaker.toLocaleUpperCase('en-US');
     this.body.text = text;
     this.root.visible = true;
@@ -144,8 +177,12 @@ export class DialogueBox {
     const hasBody = this.body.text.trim().length > 0;
     this.body.visible = hasBody;
 
+    const portraitSize = Math.max(1, DIALOGUE_CONFIG.portraitSize);
+    const textX = hasSpeaker ? portraitSize + DIALOGUE_CONFIG.portraitGap : 0;
+    const lineLength = Math.max(1, DIALOGUE_CONFIG.lineLength);
+
     let cursor = 0;
-    this.speaker.position.set(0, 0);
+    this.speaker.position.set(textX, 0);
     if (hasSpeaker) {
       cursor = this.speaker.height + NAME_GAP;
     }
@@ -153,17 +190,42 @@ export class DialogueBox {
     this.rule.visible = hasSpeaker;
     if (hasSpeaker) {
       const thickness = Math.max(1, DIALOGUE_CONFIG.lineThickness);
-      this.rule
-        .rect(0, cursor, Math.max(1, DIALOGUE_CONFIG.lineLength), thickness)
-        .fill(DIALOGUE_CONFIG.lineColor);
+      this.rule.rect(textX, cursor, lineLength, thickness).fill(DIALOGUE_CONFIG.lineColor);
       cursor += thickness + TEXT_GAP;
     }
-    this.body.position.set(0, cursor);
+    this.body.position.set(textX, cursor);
     if (hasBody) {
       cursor += this.body.height;
     }
 
-    this.root.position.set(DIALOGUE_CONFIG.x, this.viewHeight - DIALOGUE_CONFIG.bottom - cursor);
+    this.portrait.visible = hasSpeaker;
+    if (hasSpeaker) {
+      const nameMid = this.speaker.height / 2;
+      this.portrait.position.set(0, nameMid - portraitSize / 2 + portraitSize * 0.22);
+      this.drawPortrait(portraitSize);
+    }
+
+    const boxWidth = textX + lineLength;
+    this.root.position.set((this.viewWidth - boxWidth) / 2, this.viewHeight - DIALOGUE_CONFIG.bottom - cursor);
+  }
+
+  /** Square plate. A photo, when there is one, is cropped to fill it. */
+  private drawPortrait(size: number): void {
+    this.portraitFrame.clear();
+    this.portraitFrame.rect(0, 0, size, size).fill(0x141414);
+    if (!this.portraitSprite.visible) {
+      this.portraitFrame.rect(0, 0, size, size).stroke({ width: 1, color: 0x8a8a8a });
+    }
+    this.portraitMask.clear();
+    this.portraitMask.rect(0, 0, size, size).fill(0xffffff);
+
+    const texture = this.portraitSprite.texture;
+    if (!this.portraitSprite.visible || texture === Texture.EMPTY || texture.width <= 0 || texture.height <= 0) {
+      return;
+    }
+    const scale = Math.max(size / texture.width, size / texture.height);
+    this.portraitSprite.scale.set(scale);
+    this.portraitSprite.position.set(size / 2, size / 2);
   }
 
   /** Every reply is on screen. The highlighted one wears the red bar. */
@@ -172,6 +234,7 @@ export class DialogueBox {
     this.body.visible = false;
     this.rule.visible = false;
     this.rule.clear();
+    this.portrait.visible = false;
 
     const width = Math.min(CHOICE_WIDTH, Math.max(320, this.viewWidth - 160));
     const gap = 22;

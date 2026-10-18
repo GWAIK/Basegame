@@ -1,4 +1,4 @@
-import { Application, BlurFilter, Container } from 'pixi.js';
+import { Application, BlurFilter, Container, type Texture } from 'pixi.js';
 import { AssetLoader } from '../assets/AssetLoader';
 import { AudioPlayer } from '../audio/AudioPlayer';
 import { Camera } from '../camera/Camera';
@@ -36,7 +36,8 @@ export class Game {
   private readonly pauseMenu = new PauseMenu();
   private readonly blur = new BlurFilter({ strength: PAUSE_CONFIG.blur, quality: 4 });
   private readonly camera = new Camera(this.world);
-  private readonly dialogue = new DialogueManager(new DialogueBox(this.ui));
+  private readonly portraitCache = new Map<string, Promise<Texture | null>>();
+  private readonly dialogue = new DialogueManager(new DialogueBox(this.ui), (speaker) => this.portraitTexture(speaker));
   private readonly audio = new AudioPlayer();
 
   private scene: Scene | null = null;
@@ -196,6 +197,28 @@ export class Game {
     if (this.currentLocation) {
       await this.goTo(this.currentLocation.levelId, this.currentLocation.sceneId);
     }
+  }
+
+  /** One load per speaker. "Iris" reads content/shared/portraits/iris.webp. */
+  private portraitTexture(speaker: string): Promise<Texture | null> {
+    const name = speaker.trim().toLowerCase();
+    const cached = this.portraitCache.get(name);
+    if (cached) {
+      return cached;
+    }
+    const pending = this.loadPortrait(name);
+    this.portraitCache.set(name, pending);
+    return pending;
+  }
+
+  private async loadPortrait(name: string): Promise<Texture | null> {
+    const url = this.content.portraitUrl(name);
+    if (!url) {
+      console.warn(`No portrait for "${name}". Add content/shared/portraits/${name}.webp`);
+      return null;
+    }
+    const image = await this.assets.loadImage(url, { trim: false });
+    return image?.texture ?? null;
   }
 
   /** Plays an Ink knot from content/story/story.ink. */

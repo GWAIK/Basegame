@@ -699,27 +699,42 @@ function renderWorld(
   dialogue.addEventListener('click', toggleDialogue);
   fragment.append(dialogue);
   if (dialogueOpen) {
-    fragment.append(rangeField('Name', DIALOGUE_CONFIG.nameSize, 12, 96, 1, (value) => {
+    const values = document.createElement('textarea');
+    values.className = 'editor-values';
+    values.readOnly = true;
+    values.rows = 10;
+    const refreshValues = () => {
+      values.value = dialogueSnippet();
+    };
+    const write = (apply: (value: number) => void) => (value: number) => {
+      apply(value);
+      refreshValues();
+    };
+    fragment.append(rangeField('Name', DIALOGUE_CONFIG.nameSize, 12, 96, 1, write((value) => {
       DIALOGUE_CONFIG.nameSize = value;
-    }));
-    fragment.append(rangeField('Text', DIALOGUE_CONFIG.textSize, 12, 72, 1, (value) => {
+    })));
+    fragment.append(rangeField('Text', DIALOGUE_CONFIG.textSize, 12, 72, 1, write((value) => {
       DIALOGUE_CONFIG.textSize = value;
-    }));
-    fragment.append(rangeField('X', DIALOGUE_CONFIG.x, 0, 1200, 1, (value) => {
-      DIALOGUE_CONFIG.x = value;
-    }));
-    fragment.append(rangeField('Bottom', DIALOGUE_CONFIG.bottom, 0, 800, 1, (value) => {
+    })));
+    fragment.append(rangeField('Bottom', DIALOGUE_CONFIG.bottom, 0, 800, 1, write((value) => {
       DIALOGUE_CONFIG.bottom = value;
-    }));
+    })));
     fragment.append(colorField('Line', DIALOGUE_CONFIG.lineColor, (value) => {
       DIALOGUE_CONFIG.lineColor = value;
+      refreshValues();
     }));
-    fragment.append(rangeField('Thick', DIALOGUE_CONFIG.lineThickness, 1, 24, 1, (value) => {
+    fragment.append(rangeField('Thick', DIALOGUE_CONFIG.lineThickness, 1, 24, 1, write((value) => {
       DIALOGUE_CONFIG.lineThickness = value;
-    }));
-    fragment.append(rangeField('Length', DIALOGUE_CONFIG.lineLength, 40, 1600, 1, (value) => {
+    })));
+    fragment.append(rangeField('Length', DIALOGUE_CONFIG.lineLength, 40, 1600, 1, write((value) => {
       DIALOGUE_CONFIG.lineLength = value;
+    })));
+    refreshValues();
+    fragment.append(copyButton('Copy values', dialogueSnippet, () => {
+      values.focus();
+      values.select();
     }));
+    fragment.append(values);
   }
 
   const camera = document.createElement('button');
@@ -911,6 +926,47 @@ function valuesBlock(scene: SceneDef, selection: SceneSelection): DocumentFragme
   });
   fragment.append(copy, values);
   return fragment;
+}
+
+/** Current Dialogue sliders, ready to paste back into the game. */
+function dialogueSnippet(): string {
+  return `Dialogue\n${JSON.stringify({
+    nameSize: DIALOGUE_CONFIG.nameSize,
+    textSize: DIALOGUE_CONFIG.textSize,
+    bottom: DIALOGUE_CONFIG.bottom,
+    lineColor: DIALOGUE_CONFIG.lineColor,
+    lineThickness: DIALOGUE_CONFIG.lineThickness,
+    lineLength: DIALOGUE_CONFIG.lineLength,
+    portraitSize: DIALOGUE_CONFIG.portraitSize,
+    portraitGap: DIALOGUE_CONFIG.portraitGap,
+  }, null, 2)}`;
+}
+
+function copyButton(label: string, text: () => string, onFail: () => void): HTMLButtonElement {
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'editor-copy';
+  copy.textContent = label;
+  copy.addEventListener('click', () => {
+    const snippet = text();
+    void navigator.clipboard.writeText(snippet).then(
+      () => {
+        copy.textContent = 'Copied';
+        window.setTimeout(() => {
+          copy.textContent = label;
+        }, 1200);
+      },
+      () => {
+        onFail();
+        copy.textContent = 'Select the text';
+        window.setTimeout(() => {
+          copy.textContent = label;
+        }, 1600);
+      },
+    );
+    blurFocus();
+  });
+  return copy;
 }
 
 function actionButton(label: string, onClick: () => void): HTMLButtonElement {

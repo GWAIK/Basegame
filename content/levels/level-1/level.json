@@ -2,7 +2,7 @@
   "$schema": "../../schemas/level.schema.json",
   "name": "Level 1",
   "startScene": "hana",
-  "ambience": { "file": "/shared/audio/ambience.wav", "volume": 0.7 },
+  "ambience": { "file": "/shared/audio/bg_chill_guitar.wav", "volume": 0.5 },
   "scenes": {
     "hana": {
       "name": "Hana",
@@ -16,7 +16,6 @@
       "name": "Test",
       "fit": "cover",
       "background": "/shared/backgrounds/BG1_test.webp",
-      "ambience": { "file": "/shared/audio/room.wav", "volume": 0.65 },
       "characters": [
         { "image": "/shared/characters/ticket.webp", "x": 640, "y": 300, "scale": 0.45 }
       ],

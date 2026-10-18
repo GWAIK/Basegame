@@ -104,6 +104,25 @@ export class ContentLibrary {
     return this.assets.get(contentKey(path)) ?? null;
   }
 
+  /**
+   * Portrait for a dialogue speaker.
+   * "Iris" resolves to content/shared/portraits/iris.webp (png, jpg, and jpeg too).
+   */
+  portraitUrl(speaker: string): string | null {
+    const name = speaker.trim().toLowerCase();
+    if (!name || name.includes('/') || name.includes('\\')) {
+      return null;
+    }
+    for (const ext of ['webp', 'png', 'jpg', 'jpeg']) {
+      const key = `/content/shared/portraits/${name}.${ext}`;
+      const url = this.assets.get(key) ?? this.assetIgnoringCase(key);
+      if (url) {
+        return url;
+      }
+    }
+    return null;
+  }
+
   /** Image paths starting at content/, such as /shared/characters/ticket.webp. */
   images(): readonly string[] {
     const paths: string[] = [];
@@ -174,6 +193,16 @@ export class ContentLibrary {
 
   private checkAsset(levelId: string, path: string, where: string, problems: ContentProblems): void {
     this.checkKey(assetKey(levelId, path), where, problems);
+  }
+
+  private assetIgnoringCase(key: string): string | null {
+    const lower = key.toLowerCase();
+    for (const [candidate, url] of this.assets) {
+      if (candidate.toLowerCase() === lower) {
+        return url;
+      }
+    }
+    return null;
   }
 
   private checkKey(key: string, where: string, problems: ContentProblems): void {

@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { GAME_FONTS } from '../theme/fonts';
 
 type Choice = 'ok' | 'cancel';
-type Mode = 'off' | 'choose' | 'black';
+type Mode = 'off' | 'choose' | 'black' | 'wall';
 
 interface Hit {
   id: 'up' | 'down' | 'ok';
@@ -43,6 +43,10 @@ export class FocusScreen {
 
   get isChoosing(): boolean {
     return this.mode === 'choose';
+  }
+
+  get isUpdateWall(): boolean {
+    return this.mode === 'wall';
   }
 
   resize(side: number): void {
@@ -92,6 +96,17 @@ export class FocusScreen {
     return new Promise((resolve) => {
       this.fadeDone = resolve;
     });
+  }
+
+  /** Fake store wall after Iris speaks. Stays on the black until the scene is left. */
+  showUpdateWall(): void {
+    this.finishFade();
+    this.mode = 'wall';
+    this.hover = null;
+    this.kick = 0;
+    this.root.visible = true;
+    this.root.alpha = 1;
+    this.draw();
   }
 
   close(): void {
@@ -211,6 +226,10 @@ export class FocusScreen {
     const black = new Graphics();
     black.rect(0, 0, this.side, this.side).fill(0x000000);
     this.root.addChild(black);
+    if (this.mode === 'wall') {
+      this.addUpdateWall();
+      return;
+    }
     if (this.mode !== 'choose') {
       return;
     }
@@ -269,6 +288,25 @@ export class FocusScreen {
     caption.position.set(center, buttonY + buttonH / 2);
     this.root.addChild(button, caption);
     this.hits.push({ id: 'ok', x: buttonX, y: buttonY, width: buttonW, height: buttonH });
+  }
+
+  private addUpdateWall(): void {
+    const notice = new Text({
+      text: 'Your application is out of date.\n\nPlease download it from the store to continue the story.',
+      anchor: 0.5,
+      style: {
+        fill: '#f4ebe1',
+        fontFamily: GAME_FONTS.display,
+        fontWeight: '700',
+        fontSize: Math.max(28, Math.round(this.side * 0.052)),
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: this.side * 0.82,
+        lineHeight: Math.max(36, Math.round(this.side * 0.072)),
+      },
+    });
+    notice.position.set(this.side / 2, this.side / 2);
+    this.root.addChild(notice);
   }
 
   private addChevron(id: 'up' | 'down', x: number, y: number): void {

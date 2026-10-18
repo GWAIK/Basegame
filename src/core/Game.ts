@@ -12,14 +12,17 @@ import { isPauseKey, PAUSE_CONFIG, PAUSE_KEYS } from '../pause/PauseConfig';
 import { PauseMenu } from '../pause/PauseMenu';
 import { StageScene } from '../scenes/StageScene';
 import { FocusScreen } from '../focus/FocusScreen';
-import { buyInShopFirstMessage, dayCompleteMessage, DAY_COINS } from '../popup/dayReward';
+import { buyInShopFirstMessage, dayCompleteMessage, noRoomThereMessage, DAY_COINS } from '../popup/dayReward';
 import { Popup } from '../popup/Popup';
 import { Progression } from '../progression/Progression';
-import { WIRELESS_MOUSE_ID } from '../shop/catalog';
+import { NIGHT_STUDY_ID, WIRELESS_MOUSE_ID } from '../shop/catalog';
 import { ShopScreen } from '../shop/ShopScreen';
 import { Wallet } from '../shop/Wallet';
 import { LevelTimer } from '../timer/LevelTimer';
+import { TIMER_DRAIN_COLOR, TIMER_DRAIN_STEP_MS } from '../timer/TimerConfig';
 import { LoadingScreen } from '../load/LoadingScreen';
+import { LookTransition } from '../hud/LookTransition';
+import { SideArrows } from '../hud/SideArrows';
 import { EventBus } from './EventBus';
 import type { GameEvents, SceneLocation } from './GameEvents';
 import type { Scene } from './Scene';
@@ -31,7 +34,7 @@ import type { Scene } from './Scene';
  * stage
  *   play   <- blurred and frozen while paused
  *     world  <- camera moves this; the current scene's root lives here
- *     ui     <- dialogue, fixed on screen
+ *     ui     <- dialogue and HUD, fixed on screen
  *   pause  <- resume, settings, main menu
  */
 export class Game {
@@ -47,6 +50,8 @@ export class Game {
   private readonly pauseLayer = new Container({ label: 'pause-layer' });
   private readonly pauseMenu = new PauseMenu();
   private readonly levelTimer = new LevelTimer();
+  private readonly sideArrows = new SideArrows();
+  private readonly lookTransition = new LookTransition();
   private readonly progression = new Progression();
   private readonly wallet = new Wallet();
   private readonly shop = new ShopScreen(this.wallet);
@@ -76,6 +81,16 @@ export class Game {
   private keepTimer = false;
   /** The minute ran out. Fade, narrate, then leave for the menu. */
   private sessionEnding = false;
+  /** Level 1 has already snapped Iris's head up this visit. */
+  private level1Caught = false;
+  /** Level 3 has already glitched Iris out of the room this visit. */
+  private level3Glitched = false;
+  /** First side-arrow click started the ten-second look countdown. */
+  private level3LookWait = false;
+  private level3LookElapsed = 0;
+  private dialogueToken = 0;
+  private cursorNormal = 'auto';
+  private cursorInteract = 'pointer';
 
   constructor(readonly content: ContentLibrary) {}
 
@@ -110,6 +125,7 @@ export class Game {
     const loading = this.loading;
     this.screen.addChild(
       this.world,
+      this.lookTransition.root,
       this.levelTimer.root,
       this.shop.root,
       this.focusScreen.root,
@@ -120,11 +136,13 @@ export class Game {
     }
     this.screen.mask = this.screenMask;
     this.play.addChild(this.screen, this.screenMask, this.ui);
+    this.ui.addChildAt(this.sideArrows.root, 0);
     this.pauseLayer.addChild(this.pauseMenu.root);
     this.app.stage.addChild(this.play, this.pauseLayer);
     this.blur.repeatEdgePixels = true;
     this.pauseMenu.onSelect = (action) => this.onPauseSelect(action);
     this.levelTimer.onComplete = () => this.onTimerComplete();
+    this.levelTimer.onChange = (remaining, previous) => this.onLevelTimerChange(remaining, previous);
     this.popup.onDismiss = () => {
       const url = this.content.contentAssetUrl('/shared/audio/click.wav');
       if (url) {
@@ -139,14 +157,17 @@ export class Game {
       if (url) {
         this.audio.playSound(url, 0.55);
       }
-      if (itemId !== WIRELESS_MOUSE_ID) {
+      if (itemId === WIRELESS_MOUSE_ID) {
+        this.progression.unlockMouse();
+        this.shop.close();
+        void this.popup.show({
+          text: 'You can now interact with the world using your mouse.',
+        });
         return;
       }
-      this.progression.unlockMouse();
-      this.shop.close();
-      void this.popup.show({
-        text: 'You can now interact with the world using your mouse.',
-      });
+      if (itemId === NIGHT_STUDY_ID) {
+        this.progression.unlockNightStudy();
+      }
     };
     this.handleResize();
 
@@ -154,8 +175,11 @@ export class Game {
       if (!this.paused) {
         this.camera.update(ticker.deltaMS);
         this.levelTimer.update(ticker.deltaMS);
+        this.sideArrows.update(ticker.deltaMS);
+        this.lookTransition.update(ticker.deltaMS);
         this.focusScreen.update(ticker.deltaMS);
         this.scene?.update(ticker.deltaMS);
+        this.tickLevel3LookWait(ticker.deltaMS);
         this.dialogue.refresh();
         this.events.emit('update', { deltaMS: ticker.deltaMS });
       } else {
@@ -166,6 +190,7 @@ export class Game {
     });
     this.app.renderer.on('resize', () => this.handleResize());
     document.addEventListener('fullscreenchange', () => this.refreshFullscreenLabel());
+    await this.applyCursors();
     this.bindInput();
     await this.preloadAssets();
 
@@ -219,6 +244,7 @@ export class Game {
     }
 
     this.dialogue.close();
+    this.lookTransition.cancel();
     this.camera.setZoomed(false);
     if (this.scene && this.currentLocation) {
       this.events.emit('scene:exit', this.currentLocation);
@@ -231,11 +257,24 @@ export class Game {
       this.levelTimer.setVisible(false);
     } else if (previousLevelId !== level.id) {
       this.levelTimer.enter(level.id);
+      if (level.id === 'level-1') {
+        this.level1Caught = false;
+      }
+      if (level.id === 'level-3') {
+        this.level3Glitched = false;
+        this.level3LookWait = false;
+        this.level3LookElapsed = 0;
+      }
+    }
+    if (this.focusScreen.isUpdateWall) {
+      this.focusScreen.close();
+      this.sessionEnding = false;
     }
     this.currentLocation = { levelId: level.id, sceneId: definition.id };
+    this.syncSideArrows();
     this.shop.close();
     this.shop.setOnMenu(level.id === 'menu' && this.progression.shopUnlocked);
-    this.app.canvas.style.cursor = '';
+    this.app.canvas.style.cursor = this.cursorNormal;
     this.world.addChild(next.root);
     this.events.emit('scene:enter', this.currentLocation);
     this.refreshFullscreenLabel();
@@ -357,6 +396,11 @@ export class Game {
     this.levelTimer.setHeld(held);
   }
 
+  /** Debug tool. Removes seconds from the level clock. */
+  trimTimer(seconds: number): void {
+    this.levelTimer.skip(seconds);
+  }
+
   shakeCamera(intensity = 10, durationMs = 300): void {
     this.camera.shake(intensity, durationMs);
   }
@@ -413,11 +457,40 @@ export class Game {
     this.pauseMenu.resize(side, side);
     this.scene?.resize(side, side);
     this.levelTimer.resize(side);
+    this.sideArrows.resize(side);
+    this.lookTransition.resize(side);
     this.shop.resize(side);
     this.focusScreen.resize(side);
     this.popup.resize(side);
     this.loading?.resize(side);
     this.events.emit('resize', { width: side, height: side });
+  }
+
+  /** normal.png at rest, interact.png over a button. Editor resize handles stay system cursors. */
+  private async applyCursors(): Promise<void> {
+    const normal = this.content.contentAssetUrl('/shared/cursors/normal.png');
+    const interact = this.content.contentAssetUrl('/shared/cursors/interact.png');
+    const [normalCursor, interactCursor] = await Promise.all([
+      normal ? scaleCursor(normal, CURSOR_SCALE) : null,
+      interact ? scaleCursor(interact, CURSOR_SCALE) : null,
+    ]);
+    if (normalCursor) {
+      this.cursorNormal = normalCursor;
+    }
+    if (interactCursor) {
+      this.cursorInteract = interactCursor;
+    }
+    this.app.canvas.style.cursor = this.cursorNormal;
+  }
+
+  private gameCursor(cursor: string | null): string {
+    if (cursor === 'pointer') {
+      return this.cursorInteract;
+    }
+    if (cursor === null || cursor === '') {
+      return this.cursorNormal;
+    }
+    return cursor;
   }
 
   private bindInput(): void {
@@ -437,19 +510,19 @@ export class Game {
     window.addEventListener('pointermove', (event) => {
       const point = toScreen(event);
       if (this.paused) {
-        canvas.style.cursor = this.pauseMenu.hover(point.x, point.y) ? 'pointer' : '';
+        canvas.style.cursor = this.gameCursor(this.pauseMenu.hover(point.x, point.y) ? 'pointer' : '');
         return;
       }
       if (this.popup.isOpen) {
-        canvas.style.cursor = this.inScreen(point) && this.popup.hoverAt(point.x, point.y) ? 'pointer' : '';
+        canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.popup.hoverAt(point.x, point.y) ? 'pointer' : '');
         return;
       }
       if (this.shop.isOpen) {
-        canvas.style.cursor = this.inScreen(point) && this.shop.hoverAt(point.x, point.y) ? 'pointer' : '';
+        canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.shop.hoverAt(point.x, point.y) ? 'pointer' : '');
         return;
       }
       if (this.focusScreen.isChoosing) {
-        canvas.style.cursor = this.inScreen(point) && this.focusScreen.hoverAt(point.x, point.y) ? 'pointer' : '';
+        canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.focusScreen.hoverAt(point.x, point.y) ? 'pointer' : '');
         return;
       }
       if (!this.scene?.isCapturingPointer()) {
@@ -459,8 +532,10 @@ export class Game {
         ? (this.dialogue.hover(point.x, point.y) ? 'pointer' : '')
         : this.dialogue.isActive
           ? null
-          : (this.inScreen(point) ? (this.scene?.onPointerMove(point.x, point.y) ?? null) : null);
-      canvas.style.cursor = cursor ?? '';
+          : this.sideArrows.hitAt(point.x, point.y)
+            ? 'pointer'
+            : (this.inScreen(point) ? (this.scene?.onPointerMove(point.x, point.y) ?? null) : null);
+      canvas.style.cursor = this.gameCursor(cursor);
     });
 
     canvas.addEventListener('pointerdown', (event) => {
@@ -492,6 +567,11 @@ export class Game {
         }
         return;
       }
+      const arrow = this.sideArrows.hitAt(point.x, point.y);
+      if (arrow) {
+        void this.onSideArrow(arrow);
+        return;
+      }
       if (this.inScreen(point)) {
         this.scene?.onPointerDown(point.x, point.y);
       }
@@ -521,6 +601,11 @@ export class Game {
         return;
       }
       this.audio.unlock();
+      if (event.code === 'F6' && event.shiftKey) {
+        event.preventDefault();
+        void this.toggleDevTools();
+        return;
+      }
       if (this.popup.isOpen) {
         if (event.code === 'Enter' || event.code === 'Space' || event.code === 'Escape') {
           event.preventDefault();
@@ -614,7 +699,7 @@ export class Game {
     this.play.filters = paused ? [this.blur] : null;
     this.blur.strength = PAUSE_CONFIG.blur;
     this.pauseMenu.setOpen(paused);
-    this.app.canvas.style.cursor = '';
+    this.app.canvas.style.cursor = this.cursorNormal;
   }
 
   private onPauseSelect(action: 'resume' | 'settings' | 'menu'): void {
@@ -681,6 +766,7 @@ export class Game {
     this.camera.setLocked(false);
     this.levelTimer.setVisible(true);
     this.world.addChild(held.scene.root);
+    this.syncSideArrows();
     this.events.emit('scene:enter', held.location);
     this.refreshFullscreenLabel();
     this.syncAmbience(held.scene.level, held.scene.definition);
@@ -738,6 +824,10 @@ export class Game {
       await this.popup.show(buyInShopFirstMessage());
       return;
     }
+    if (this.progression.needsNightStudy) {
+      await this.popup.show(noRoomThereMessage());
+      return;
+    }
     const token = ++this.focusToken;
     const choice = await this.focusScreen.open();
     if (token !== this.focusToken) {
@@ -767,6 +857,10 @@ export class Game {
   /** 00:00. The frame fades out, a narrator closes the day, then the menu returns. */
   private onTimerComplete(): void {
     if (this.sessionEnding || !this.isPlaying()) {
+      return;
+    }
+    if (this.currentLocation?.levelId === 'level-3') {
+      void this.startLevel3Wall();
       return;
     }
     void this.endSession();
@@ -817,6 +911,133 @@ export class Game {
     });
   }
 
+  private onLevelTimerChange(remaining: number, previous: number): void {
+    this.tryLevel1Caught(remaining, previous);
+    this.tryLevel3Glitch(remaining, previous);
+  }
+
+  private tryLevel1Caught(remaining: number, previous: number): void {
+    if (this.level1Caught || this.currentLocation?.levelId !== 'level-1') {
+      return;
+    }
+    if (!(previous > 20 && remaining <= 20)) {
+      return;
+    }
+    this.level1Caught = true;
+    this.levelTimer.freezeAt(20);
+    this.camera.setZoomed(false);
+    this.actionToken += 1;
+    const riseUrl = this.content.contentAssetUrl('/shared/audio/riseup.mp3');
+    this.audio.playAmbience(riseUrl, 0.7, 16);
+    if (this.scene instanceof StageScene) {
+      this.scene.consumeTrigger('trigger-1');
+      this.scene.consumeTrigger('trigger-2');
+      void this.scene.replaceBackground('day-study-look.png');
+    }
+    void this.playDialogueAndWait('level1_caught').then(() => {
+      this.kickOutOfStudy();
+    });
+  }
+
+  private tryLevel3Glitch(remaining: number, previous: number): void {
+    if (this.level3Glitched || this.currentLocation?.levelId !== 'level-3') {
+      return;
+    }
+    if (!(previous > 57 && remaining <= 57)) {
+      return;
+    }
+    this.level3Glitched = true;
+    const glitch = this.content.contentAssetUrl('/shared/audio/glitch.mp3');
+    if (glitch) {
+      this.audio.playSound(glitch, 0.55);
+    }
+    this.audio.playAmbience(null, 0);
+    this.shakeCamera(16, 420);
+    if (this.scene instanceof StageScene) {
+      const scene = this.scene;
+      void scene.replaceBackground('night-study-no-iris.jpg').then(() => {
+        if (this.scene !== scene || this.currentLocation?.levelId !== 'level-3') {
+          return;
+        }
+        void this.sideArrows.show(this.content, this.assets);
+      });
+    }
+  }
+
+  /** HUD arrows live on the UI layer. They only belong on glitched level 3. */
+  private syncSideArrows(): void {
+    if (this.currentLocation?.levelId === 'level-3' && this.level3Glitched) {
+      void this.sideArrows.show(this.content, this.assets);
+      return;
+    }
+    this.sideArrows.hide();
+  }
+
+  /** Left looks left, right looks right. Both stills fade through black. */
+  private async onSideArrow(arrow: 'arrow-left' | 'arrow-right'): Promise<void> {
+    if (this.lookTransition.busy || this.sessionEnding) {
+      return;
+    }
+    if (!(this.scene instanceof StageScene) || this.currentLocation?.levelId !== 'level-3') {
+      return;
+    }
+    const scene = this.scene;
+    if (!this.level3LookWait) {
+      this.level3LookWait = true;
+      this.level3LookElapsed = 0;
+    }
+    const inBackRoom = (scene.currentBackground ?? '').includes('back-room');
+    const next = inBackRoom
+      ? { path: 'night-study-no-iris.jpg', fit: 'width' as const }
+      : { path: 'back-room.webp', fit: 'height' as const };
+    const direction = arrow === 'arrow-right' ? 1 : -1;
+    await this.lookTransition.play(direction, scene, () => scene.replaceBackground(next.path, next.fit));
+  }
+
+  private tickLevel3LookWait(deltaMS: number): void {
+    if (!this.level3LookWait || this.sessionEnding || this.currentLocation?.levelId !== 'level-3') {
+      return;
+    }
+    this.level3LookElapsed += deltaMS;
+    if (this.level3LookElapsed >= 10_000) {
+      void this.startLevel3Wall();
+    }
+  }
+
+  /** Blackout, Iris, then a fake store wall. Pause is blocked while this is up. */
+  private async startLevel3Wall(): Promise<void> {
+    if (this.sessionEnding || this.currentLocation?.levelId !== 'level-3') {
+      return;
+    }
+    this.sessionEnding = true;
+    this.level3LookWait = false;
+    this.lookTransition.cancel();
+    this.sideArrows.hide();
+    this.levelTimer.setVisible(false);
+    this.camera.setLocked(true);
+    this.actionToken += 1;
+    const token = ++this.focusToken;
+    await this.focusScreen.fadeToBlack(700);
+    if (token !== this.focusToken) {
+      this.sessionEnding = false;
+      return;
+    }
+    await this.playDialogueAndWait('level3_snooped');
+    if (token !== this.focusToken) {
+      this.focusScreen.close();
+      this.sessionEnding = false;
+      return;
+    }
+    this.focusScreen.showUpdateWall();
+  }
+
+  private kickOutOfStudy(): void {
+    if (this.currentLocation?.levelId !== 'level-1' || this.sessionEnding) {
+      return;
+    }
+    this.levelTimer.drainToZero(TIMER_DRAIN_COLOR, TIMER_DRAIN_STEP_MS);
+  }
+
   private async playDialogueAndWait(dialogueId: string, zoom = false): Promise<void> {
     const story = this.content.story;
     if (!story || !this.content.hasKnot(dialogueId)) {
@@ -824,6 +1045,7 @@ export class Game {
       return;
     }
 
+    const token = ++this.dialogueToken;
     if (zoom) {
       this.camera.setZoomed(true);
     }
@@ -831,6 +1053,9 @@ export class Game {
     const ending = await this.dialogue.play(story, dialogueId, (effect) => {
       this.applyInkEffect(effect);
     });
+    if (token !== this.dialogueToken) {
+      return;
+    }
     if (zoom) {
       this.camera.setZoomed(false);
     }
@@ -852,6 +1077,9 @@ export class Game {
     }
     if (effect.type === 'event') {
       this.events.emit('dialogue:event', { name: effect.name });
+      if (effect.name === 'level1_kick') {
+        this.kickOutOfStudy();
+      }
     }
   }
 
@@ -885,6 +1113,45 @@ export class Game {
     }
     this.audio.playAmbience(url, cue.volume);
   }
+}
+
+const CURSOR_SCALE = 2;
+
+/** A custom cursor image. The tip sits on the top-left pixel. */
+function cursorUrl(url: string): string {
+  return `url("${url}") 0 0, auto`;
+}
+
+/** Draws the cursor bigger without blurring its pixels. Browsers ignore a CSS scale on cursor images. */
+async function scaleCursor(url: string, scale: number): Promise<string> {
+  try {
+    const image = await loadCursorImage(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth * scale;
+    canvas.height = image.naturalHeight * scale;
+    const context = canvas.getContext('2d');
+    if (!context || canvas.width === 0) {
+      return cursorUrl(url);
+    }
+    context.imageSmoothingEnabled = false;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) {
+      return cursorUrl(url);
+    }
+    return cursorUrl(URL.createObjectURL(blob));
+  } catch {
+    return cursorUrl(url);
+  }
+}
+
+function loadCursorImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Could not load cursor ${url}`));
+    image.src = url;
+  });
 }
 
 /** The dialogue field is the first step, then anything listed in onEnter. */

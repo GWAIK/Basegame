@@ -17,3 +17,10 @@ export function buyInShopFirstMessage(): PopupMessage {
     text: 'Try buying something in the shop first.',
   };
 }
+
+/** Shown when Start Focus is pressed after level 2, before Night study is bought. */
+export function noRoomThereMessage(): PopupMessage {
+  return {
+    text: "There's no more room for you there.",
+  };
+}

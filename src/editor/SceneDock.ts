@@ -752,7 +752,14 @@ function renderWorld(
       game.holdTimer(!game.isTimerHeld);
       refreshHold();
     });
-    fragment.append(hold);
+    const skip = document.createElement('button');
+    skip.type = 'button';
+    skip.className = 'editor-copy';
+    skip.textContent = '-10';
+    skip.addEventListener('click', () => {
+      game.trimTimer(10);
+    });
+    fragment.append(hold, skip);
     const values = document.createElement('textarea');
     values.className = 'editor-values';
     values.readOnly = true;

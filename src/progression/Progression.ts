@@ -1,4 +1,4 @@
-const FOCUS_LEVELS = ['level-0', 'level-1', 'level-2'] as const;
+const FOCUS_LEVELS = ['level-0', 'level-1', 'level-2', 'level-3'] as const;
 
 /**
  * Shared progression for this launch only.
@@ -9,6 +9,7 @@ export class Progression {
   day = 0;
   shopUnlocked = false;
   mouseOwned = false;
+  nightStudyOwned = false;
 
   constructor() {
     try {
@@ -23,8 +24,14 @@ export class Progression {
     if (!this.mouseOwned) {
       return 'level-0';
     }
-    const index = Math.min(Math.max(this.day, 1), FOCUS_LEVELS.length - 1);
+    const cap = this.nightStudyOwned ? FOCUS_LEVELS.length - 1 : 2;
+    const index = Math.min(Math.max(this.day, 1), cap);
     return FOCUS_LEVELS[index] ?? 'level-1';
+  }
+
+  /** After level 2, Start Focus waits for Night study. */
+  get needsNightStudy(): boolean {
+    return this.day >= 3 && !this.nightStudyOwned;
   }
 
   /** Records a finished focus countdown. Returns true the first time the shop unlocks. */
@@ -38,5 +45,10 @@ export class Progression {
   /** The wireless mouse is what lets Start Focus open level 1. */
   unlockMouse(): void {
     this.mouseOwned = true;
+  }
+
+  /** Night study is what lets Start Focus open level 3. */
+  unlockNightStudy(): void {
+    this.nightStudyOwned = true;
   }
 }

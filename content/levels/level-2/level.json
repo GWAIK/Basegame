@@ -1,17 +1,14 @@
 {
   "$schema": "../../schemas/level.schema.json",
   "name": "Level 2",
-  "startScene": "roof",
-  "ambience": { "file": "/shared/audio/bg_chill_guitar.wav", "volume": 0.5 },
+  "startScene": "study",
+  "ambience": { "file": "/shared/audio/riseup.mp3", "volume": 0.7 },
   "scenes": {
-    "roof": {
-      "name": "Roof",
+    "study": {
+      "name": "Study",
       "fit": "width",
-      "background": "/shared/backgrounds/BG1_test.webp",
-      "dialogue": "level2_roof",
-      "onEnter": [
-        { "sound": "/shared/audio/arrive.wav", "volume": 0.7 }
-      ]
+      "look": true,
+      "background": "day-study-no-iris.jpg"
     }
   }
 }

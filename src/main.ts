@@ -1,7 +1,6 @@
 import './style.css';
 import { ContentLibrary } from './content/ContentLibrary';
 import { Game } from './core/Game';
-import { devTools, mountDevTools } from './debug/devTools';
 import { readyGameFonts } from './theme/fonts';
 
 const host = document.querySelector('#app');
@@ -17,7 +16,3 @@ for (const problem of content.problems) {
 
 const game = new Game(content);
 await game.start(host);
-
-if (devTools.enabled) {
-  await mountDevTools(game);
-}

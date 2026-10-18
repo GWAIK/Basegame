@@ -22,7 +22,7 @@ interface Hit {
  */
 export class ShopScreen {
   readonly root = new Container({ label: 'shop' });
-  onPurchase: ((bought: boolean) => void) | null = null;
+  onPurchase: ((itemId: string, bought: boolean) => void) | null = null;
 
   private readonly wallet: Wallet;
   private open = false;
@@ -109,7 +109,7 @@ export class ShopScreen {
       return;
     }
     const bought = this.wallet.buy(id);
-    this.onPurchase?.(bought);
+    this.onPurchase?.(id, bought);
   }
 
   wheel(deltaY: number): void {
@@ -212,7 +212,8 @@ export class ShopScreen {
     const content = new Container();
     content.position.set(pad + 16, this.listTop - this.scroll);
     let cursor = 0;
-    cursor = this.addSection(content, 'Decor', 'decor', cursor, pad);
+    cursor = this.addSection(content, 'Special', 'special', cursor, pad);
+    cursor = this.addSection(content, 'Decor', 'decor', cursor + 4, pad);
     cursor = this.addSection(content, 'Maps', 'map', cursor + 4, pad);
     const mask = new Graphics();
     mask.rect(pad + 8, this.listTop, this.side - pad * 2 - 16, this.listHeight).fill(0xffffff);

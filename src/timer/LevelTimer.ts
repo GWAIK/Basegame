@@ -19,6 +19,8 @@ export class LevelTimer {
   private carry = 0;
   private viewWidth = 0;
   private completed = false;
+  /** Debug hold. The clock stays on screen and does not count. */
+  private held = false;
 
   constructor() {
     this.time = new Text({
@@ -56,13 +58,25 @@ export class LevelTimer {
     this.root.visible = visible && this.logic !== null;
   }
 
+  get isHeld(): boolean {
+    return this.held;
+  }
+
+  /** Freezes the countdown. The digits stay where they are. */
+  setHeld(held: boolean): void {
+    this.held = held;
+    if (held) {
+      this.carry = 0;
+    }
+  }
+
   /** One second of the clock per second of play. A pause skips this. */
   update(deltaMS: number): void {
     if (!this.logic || !this.root.visible) {
       return;
     }
     this.layout();
-    if (this.remaining <= 0) {
+    if (this.held || this.remaining <= 0) {
       return;
     }
     this.carry += deltaMS;

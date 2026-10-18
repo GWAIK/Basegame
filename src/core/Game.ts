@@ -12,6 +12,10 @@ import { isPauseKey, PAUSE_CONFIG, PAUSE_KEYS } from '../pause/PauseConfig';
 import { PauseMenu } from '../pause/PauseMenu';
 import { StageScene } from '../scenes/StageScene';
 import { FocusScreen } from '../focus/FocusScreen';
+import { buyInShopFirstMessage, dayCompleteMessage, DAY_COINS } from '../popup/dayReward';
+import { Popup } from '../popup/Popup';
+import { Progression } from '../progression/Progression';
+import { WIRELESS_MOUSE_ID } from '../shop/catalog';
 import { ShopScreen } from '../shop/ShopScreen';
 import { Wallet } from '../shop/Wallet';
 import { LevelTimer } from '../timer/LevelTimer';
@@ -42,9 +46,11 @@ export class Game {
   private readonly pauseLayer = new Container({ label: 'pause-layer' });
   private readonly pauseMenu = new PauseMenu();
   private readonly levelTimer = new LevelTimer();
+  private readonly progression = new Progression();
   private readonly wallet = new Wallet();
   private readonly shop = new ShopScreen(this.wallet);
   private readonly focusScreen = new FocusScreen();
+  private readonly popup = new Popup();
   private readonly blur = new BlurFilter({ strength: PAUSE_CONFIG.blur, quality: 4 });
   private readonly camera = new Camera(this.world);
   private readonly portraitCache = new Map<string, Promise<Texture | null>>();
@@ -53,6 +59,8 @@ export class Game {
 
   private scene: Scene | null = null;
   private currentLocation: SceneLocation | null = null;
+  /** level/scene/trigger ids that already ran. Cleared when the page reloads. */
+  private readonly spentTriggers = new Set<string>();
   private loadToken = 0;
   private actionToken = 0;
   private focusToken = 0;
@@ -97,7 +105,7 @@ export class Game {
 
     this.app.canvas.style.display = 'block';
     host.appendChild(this.app.canvas);
-    this.screen.addChild(this.world, this.levelTimer.root, this.shop.root, this.focusScreen.root);
+    this.screen.addChild(this.world, this.levelTimer.root, this.shop.root, this.focusScreen.root, this.popup.root);
     this.screen.mask = this.screenMask;
     this.play.addChild(this.screen, this.screenMask, this.ui);
     this.pauseLayer.addChild(this.pauseMenu.root);
@@ -105,7 +113,13 @@ export class Game {
     this.blur.repeatEdgePixels = true;
     this.pauseMenu.onSelect = (action) => this.onPauseSelect(action);
     this.levelTimer.onComplete = () => this.onTimerComplete();
-    this.shop.onPurchase = (bought) => {
+    this.popup.onDismiss = () => {
+      const url = this.content.contentAssetUrl('/shared/audio/click.wav');
+      if (url) {
+        this.audio.playSound(url, 0.7);
+      }
+    };
+    this.shop.onPurchase = (itemId, bought) => {
       if (!bought) {
         return;
       }
@@ -113,6 +127,14 @@ export class Game {
       if (url) {
         this.audio.playSound(url, 0.55);
       }
+      if (itemId !== WIRELESS_MOUSE_ID) {
+        return;
+      }
+      this.progression.unlockMouse();
+      this.shop.close();
+      void this.popup.show({
+        text: 'You can now interact with the world using your mouse.',
+      });
     };
     this.handleResize();
 
@@ -167,8 +189,13 @@ export class Game {
     }
 
     const token = ++this.loadToken;
-    const next = new StageScene(level, definition, this.content, this.assets);
+    const next = new StageScene(level, definition, this.content, this.assets, this.progression.shopUnlocked);
+    next.setSpentTriggers(this.spentIds(level.id, definition.id));
     next.setTriggerHandler((trigger) => {
+      if (trigger.once) {
+        this.spentTriggers.add(this.triggerKey(level.id, definition.id, trigger.id));
+        next.consumeTrigger(trigger.id);
+      }
       void this.runActions(level, trigger.actions, true);
     });
     next.resize(this.screenSide, this.screenSide);
@@ -194,7 +221,7 @@ export class Game {
     }
     this.currentLocation = { levelId: level.id, sceneId: definition.id };
     this.shop.close();
-    this.shop.setOnMenu(level.id === 'menu');
+    this.shop.setOnMenu(level.id === 'menu' && this.progression.shopUnlocked);
     this.app.canvas.style.cursor = '';
     this.world.addChild(next.root);
     this.events.emit('scene:enter', this.currentLocation);
@@ -272,9 +299,49 @@ export class Game {
     void this.playDialogueAndWait(dialogueId);
   }
 
+  /**
+   * Dev tool. A one-time trigger disappears after it runs.
+   * Turning it off brings a spent trigger back.
+   */
+  setTriggerOnce(trigger: TriggerDef, once: boolean): void {
+    trigger.once = once;
+    const location = this.currentLocation;
+    if (!location || once) {
+      return;
+    }
+    this.spentTriggers.delete(this.triggerKey(location.levelId, location.sceneId, trigger.id));
+    if (this.scene instanceof StageScene) {
+      this.scene.releaseTrigger(trigger.id);
+    }
+  }
+
+  private triggerKey(levelId: string, sceneId: string, triggerId: string): string {
+    return `${levelId}/${sceneId}/${triggerId}`;
+  }
+
+  private spentIds(levelId: string, sceneId: string): Set<string> {
+    const prefix = `${levelId}/${sceneId}/`;
+    const ids = new Set<string>();
+    for (const key of this.spentTriggers) {
+      if (key.startsWith(prefix)) {
+        ids.add(key.slice(prefix.length));
+      }
+    }
+    return ids;
+  }
+
   /** Scales ambience and effects together. 1 is full, 0 is silent. */
   setMasterVolume(volume: number): void {
     this.audio.setMasterVolume(volume);
+  }
+
+  get isTimerHeld(): boolean {
+    return this.levelTimer.isHeld;
+  }
+
+  /** Freezes the level clock without pausing the rest of the game. */
+  holdTimer(held: boolean): void {
+    this.levelTimer.setHeld(held);
   }
 
   shakeCamera(intensity = 10, durationMs = 300): void {
@@ -305,6 +372,7 @@ export class Game {
     this.levelTimer.resize(side);
     this.shop.resize(side);
     this.focusScreen.resize(side);
+    this.popup.resize(side);
     this.events.emit('resize', { width: side, height: side });
   }
 
@@ -326,6 +394,10 @@ export class Game {
       const point = toScreen(event);
       if (this.paused) {
         canvas.style.cursor = this.pauseMenu.hover(point.x, point.y) ? 'pointer' : '';
+        return;
+      }
+      if (this.popup.isOpen) {
+        canvas.style.cursor = this.inScreen(point) && this.popup.hoverAt(point.x, point.y) ? 'pointer' : '';
         return;
       }
       if (this.shop.isOpen) {
@@ -358,6 +430,12 @@ export class Game {
         this.dialogue.advance(point.x, point.y);
         return;
       }
+      if (this.popup.isOpen) {
+        if (this.inScreen(point)) {
+          this.popup.pointerDown(point.x, point.y);
+        }
+        return;
+      }
       if (this.focusScreen.isOpen) {
         if (this.focusScreen.isChoosing && this.inScreen(point)) {
           this.focusScreen.pointerDown(point.x, point.y);
@@ -377,7 +455,7 @@ export class Game {
 
     window.addEventListener('pointerup', (event) => {
       this.audio.unlock();
-      if (this.paused || this.dialogue.isActive || this.shop.isOpen || this.focusScreen.isOpen) {
+      if (this.paused || this.dialogue.isActive || this.popup.isOpen || this.shop.isOpen || this.focusScreen.isOpen) {
         return;
       }
       const point = toScreen(event);
@@ -399,6 +477,13 @@ export class Game {
         return;
       }
       this.audio.unlock();
+      if (this.popup.isOpen) {
+        if (event.code === 'Enter' || event.code === 'Space' || event.code === 'Escape') {
+          event.preventDefault();
+          this.popup.dismiss();
+        }
+        return;
+      }
       if (this.focusScreen.isChoosing) {
         if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
           event.preventDefault();
@@ -601,10 +686,14 @@ export class Game {
   }
 
   /**
-   * Black screen, one minute only, then a short monologue, then the first level.
+   * Black screen, one minute only, then the narrator, then the first level.
    * The length cannot move. That is the story.
    */
   private async runFocus(): Promise<void> {
+    if (this.progression.shopUnlocked && !this.progression.mouseOwned) {
+      await this.popup.show(buyInShopFirstMessage());
+      return;
+    }
     const token = ++this.focusToken;
     const choice = await this.focusScreen.open();
     if (token !== this.focusToken) {
@@ -623,7 +712,8 @@ export class Game {
       this.focusScreen.close();
       return;
     }
-    await this.goTo('level-1');
+    const nextLevelId = this.content.level(this.progression.focusLevelId)?.id ?? 'level-0';
+    await this.goTo(nextLevelId);
     if (token !== this.focusToken) {
       return;
     }
@@ -663,12 +753,18 @@ export class Game {
       this.sessionEnding = false;
       return;
     }
+    const unlockedShop = this.progression.completeDay();
+    this.wallet.earn(DAY_COINS);
     await this.goTo('menu');
     if (token !== this.focusToken) {
       return;
     }
     this.focusScreen.close();
     this.sessionEnding = false;
+    if (this.currentLocation?.levelId !== 'menu') {
+      return;
+    }
+    await this.popup.show(dayCompleteMessage(unlockedShop));
   }
 
   private showNotice(text: string): Promise<void> {

@@ -517,6 +517,16 @@ body,
   user-select: text;
 }
 
+.editor-check {
+  grid-template-columns: 1fr auto;
+}
+
+.editor-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0070e0;
+}
+
 .editor-field input[type='color'] {
   padding: 0 2px;
 }

@@ -12,12 +12,24 @@
       "triggers": [
         {
           "id": "trigger-1",
-          "x": 1206,
-          "y": 2751,
-          "width": 1168,
-          "height": 2520,
+          "once": true,
+          "x": 1131,
+          "y": 2602,
+          "width": 933,
+          "height": 2221,
           "actions": [
             { "dialogue": "level1_study" }
+          ]
+        },
+        {
+          "id": "trigger-2",
+          "once": true,
+          "x": 2608,
+          "y": 2684,
+          "width": 1249,
+          "height": 888,
+          "actions": [
+            { "dialogue": "level1_work" }
           ]
         }
       ]

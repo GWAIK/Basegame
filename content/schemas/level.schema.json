@@ -108,6 +108,11 @@
           "type": "string",
           "description": "Drawn as a button. Leave it out for an invisible hotspot."
         },
+        "once": {
+          "type": "boolean",
+          "default": true,
+          "description": "The trigger disappears after it runs. False keeps it clickable. Omitted means true."
+        },
         "x": {
           "type": "number",
           "description": "Center of the rectangle, in pixels of the background."

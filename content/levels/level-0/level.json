@@ -1,0 +1,14 @@
+{
+  "$schema": "../../schemas/level.schema.json",
+  "name": "Level 0",
+  "startScene": "study",
+  "ambience": { "file": "/shared/audio/bg_chill_guitar.wav", "volume": 0.5 },
+  "scenes": {
+    "study": {
+      "name": "Study",
+      "fit": "width",
+      "look": true,
+      "background": "day-study.webp"
+    }
+  }
+}

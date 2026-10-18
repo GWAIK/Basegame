@@ -1,4 +1,6 @@
-export type ShopKind = 'decor' | 'map';
+export type ShopKind = 'special' | 'decor' | 'map';
+
+export const WIRELESS_MOUSE_ID = 'wireless-mouse';
 
 export interface ShopItem {
   id: string;
@@ -11,6 +13,13 @@ export interface ShopItem {
 
 /** Decor for the study, then maps you can unlock. */
 export const SHOP_ITEMS: readonly ShopItem[] = [
+  {
+    id: WIRELESS_MOUSE_ID,
+    kind: 'special',
+    name: 'Wireless mouse',
+    price: 10,
+    blurb: 'Special item. Lets you interact with the world.',
+  },
   { id: 'ceramic-mug', kind: 'decor', name: 'Ceramic mug', price: 40, blurb: 'A warm cup for the desk.' },
   { id: 'desk-plant', kind: 'decor', name: 'Desk plant', price: 60, blurb: 'A small green neighbor.' },
   { id: 'paper-stack', kind: 'decor', name: 'Paper stack', price: 50, blurb: 'Notes, sketches, loose pages.' },

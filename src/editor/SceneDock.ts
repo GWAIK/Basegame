@@ -626,6 +626,10 @@ function renderDetails(
     fragment.append(textField('Label', 'label', trigger.label ?? '', (value) => {
       trigger.label = value.length > 0 ? value : null;
     }));
+    fragment.append(checkField('One time', trigger.once, (value) => {
+      game.setTriggerOnce(trigger, value);
+      notifySceneTransform();
+    }));
     fragment.append(category('Transform'));
     fragment.append(numberField('X', 'x', trigger.x, (value) => {
       trigger.x = value;
@@ -737,6 +741,18 @@ function renderWorld(
   timer.addEventListener('click', toggleTimer);
   fragment.append(timer);
   if (timerOpen) {
+    const hold = document.createElement('button');
+    hold.type = 'button';
+    hold.className = 'editor-copy';
+    const refreshHold = () => {
+      hold.textContent = game.isTimerHeld ? 'Resume timer' : 'Pause timer';
+    };
+    refreshHold();
+    hold.addEventListener('click', () => {
+      game.holdTimer(!game.isTimerHeld);
+      refreshHold();
+    });
+    fragment.append(hold);
     const values = document.createElement('textarea');
     values.className = 'editor-values';
     values.readOnly = true;
@@ -836,6 +852,19 @@ function imageField(game: Game, label: string, current: string, onChange: (path:
   select.value = current;
   select.addEventListener('change', () => onChange(select.value));
   field.append(caption, select);
+  return field;
+}
+
+function checkField(label: string, checked: boolean, onChange: (value: boolean) => void): HTMLLabelElement {
+  const field = document.createElement('label');
+  field.className = 'editor-field editor-check';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  field.append(caption, input);
   return field;
 }
 

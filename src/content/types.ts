@@ -42,12 +42,14 @@ export type ActionDef =
 /**
  * A click box. x and y are its center, in pixels of the background.
  * A click runs its actions. A label draws a button; without one the box stays invisible.
- * The debug panel can draw every box.
+ * once removes the box after that click. The debug panel can draw every box.
  */
 export interface TriggerDef {
   id: string;
   /** Drawn as a button. Null keeps the box invisible. */
   label: string | null;
+  /** True removes the box after it runs. False leaves it in place. */
+  once: boolean;
   x: number;
   y: number;
   width: number;

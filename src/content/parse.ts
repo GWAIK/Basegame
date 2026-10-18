@@ -39,7 +39,7 @@ const SCENE_KEYS = [
 ];
 const CHARACTER_KEYS = ['image', 'x', 'y', 'scale'];
 const CUE_KEYS = ['file', 'volume'];
-const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
+const TRIGGER_KEYS = ['id', 'label', 'once', 'x', 'y', 'width', 'height', 'actions'];
 const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
 const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen', 'shop', 'focus'] as const;
@@ -406,6 +406,7 @@ function parseTrigger(
   return {
     id,
     label: optionalString(raw, 'label', where, problems),
+    once: readBool(raw, 'once', true, where, problems),
     x,
     y,
     width,

@@ -42,6 +42,8 @@ export class Triggers {
   private debugKey = '';
   private hiddenKey = '';
   private hiddenTriggerIds: ReadonlySet<string> = new Set();
+  private lockedTriggerIds: ReadonlySet<string> = new Set();
+  private spentTriggerIds: ReadonlySet<string> = new Set();
   private shown = false;
   private drawnScale = 0;
 
@@ -190,8 +192,50 @@ export class Triggers {
     this.clearSelection();
   }
 
+  /** Hides triggers that are locked by gameplay progression. */
+  setLockedTriggers(ids: ReadonlySet<string>): void {
+    this.lockedTriggerIds = ids;
+    this.invalidate();
+  }
+
+  /** Hides triggers that already ran this session. */
+  setSpentTriggers(ids: ReadonlySet<string>): void {
+    this.spentTriggerIds = ids;
+    this.invalidate();
+  }
+
+  /** A one-time trigger just ran. It no longer draws or accepts a click. */
+  consume(id: string): void {
+    if (this.spentTriggerIds.has(id)) {
+      return;
+    }
+    this.spentTriggerIds = new Set(this.spentTriggerIds).add(id);
+    this.invalidate();
+  }
+
+  /** Puts a spent trigger back, for the dev tool's one-time switch. */
+  release(id: string): void {
+    if (!this.spentTriggerIds.has(id)) {
+      return;
+    }
+    const next = new Set(this.spentTriggerIds);
+    next.delete(id);
+    this.spentTriggerIds = next;
+    this.invalidate();
+  }
+
+  private invalidate(): void {
+    this.faceKey = '';
+    this.debugKey = '';
+    if (this.shown) {
+      this.redraw(this.drawnScale || 1);
+    }
+  }
+
   private isHidden(trigger: TriggerDef): boolean {
-    return this.hiddenTriggerIds.has(trigger.id);
+    return this.lockedTriggerIds.has(trigger.id)
+      || this.hiddenTriggerIds.has(trigger.id)
+      || this.spentTriggerIds.has(trigger.id);
   }
 
   private get editing(): boolean {
@@ -402,6 +446,10 @@ function drawButton(trigger: TriggerDef, hovered: boolean): Container {
   const isIconOnly = Math.abs(trigger.width - trigger.height) <= 24 && trigger.width <= 120;
   const isPrimary = id === 'play' || (trigger.label ?? '').toLowerCase().includes('focus');
 
+  if (id.includes('shop') && !isIconOnly) {
+    return drawShopWithLabel(trigger, hovered, left);
+  }
+
   const box = new Graphics();
   const radius = isIconOnly ? Math.min(trigger.width, trigger.height) / 2 : Math.min(38, trigger.height / 2);
 
@@ -463,6 +511,33 @@ function drawButton(trigger: TriggerDef, hovered: boolean): Container {
     root.addChild(label);
   }
 
+  return root;
+}
+
+/** Circular shop button, with its name sitting to the right. The whole row stays clickable. */
+function drawShopWithLabel(trigger: TriggerDef, hovered: boolean, left: number): Container {
+  const diameter = Math.min(trigger.height, trigger.width);
+  const cx = left + diameter / 2;
+  const cy = trigger.y;
+  const plate = new Graphics();
+  plate.circle(cx, cy, diameter / 2).fill({ color: hovered ? 0xefe3d5 : 0xf7efe6 }).stroke({
+    color: hovered ? 0xd97757 : 0xdecbb8,
+    width: 2,
+  });
+  const caption = new Text({
+    text: trigger.label?.trim() || 'Shop',
+    anchor: { x: 0, y: 0.5 },
+    style: {
+      fill: '#4a372d',
+      fontFamily: GAME_FONTS.cozy,
+      fontWeight: '700',
+      fontSize: Math.max(26, Math.min(36, diameter * 0.4)),
+      letterSpacing: 0.4,
+    },
+  });
+  caption.position.set(cx + diameter / 2 + 22, cy);
+  const root = new Container();
+  root.addChild(plate, drawButtonIcon('shop', cx, cy, diameter * 0.24, hovered), caption);
   return root;
 }
 

@@ -82,6 +82,7 @@ export function placeTrigger(scene: SceneDef, size?: SceneDimensions | null): Sc
   triggers.push({
     id,
     label: null,
+    once: true,
     x: center.x,
     y: center.y,
     width: Math.min(280, Math.max(64, Math.round((size?.width ?? 1920) * 0.2))),
@@ -171,7 +172,8 @@ export function sceneSnippet(scene: SceneDef, selection: SceneSelection | null):
     width: Math.round(trigger.width),
     height: Math.round(trigger.height),
   });
-  return trigger.label ? `"label": ${JSON.stringify(trigger.label)}, ${rect}` : rect;
+  const once = `"once": ${trigger.once}`;
+  return trigger.label ? `"label": ${JSON.stringify(trigger.label)}, ${rect}, ${once}` : `${rect}, ${once}`;
 }
 
 function roundScale(value: number): number {

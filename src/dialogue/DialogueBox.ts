@@ -1,4 +1,5 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { GAME_FONTS } from '../theme/fonts';
 import { DIALOGUE_CONFIG } from './DialogueConfig';
 
 const CHOICE_WIDTH = 820;
@@ -31,9 +32,9 @@ export class DialogueBox {
       text: '',
       style: {
         fill: '#f0b429',
-        fontFamily: 'Impact, "Arial Black", sans-serif',
+        fontFamily: GAME_FONTS.display,
         fontStyle: 'italic',
-        fontWeight: 'bold',
+        fontWeight: '700',
         fontSize: DIALOGUE_CONFIG.nameSize,
       },
     });
@@ -42,7 +43,8 @@ export class DialogueBox {
       text: '',
       style: {
         fill: '#ffffff',
-        fontFamily: 'Georgia, "Times New Roman", serif',
+        fontFamily: GAME_FONTS.cozy,
+        fontWeight: '600',
         fontSize: DIALOGUE_CONFIG.textSize,
         wordWrap: true,
         wordWrapWidth: 400,
@@ -127,8 +129,9 @@ export class DialogueBox {
   /** Screen point. Returns the choice index, or null when the point misses every button. */
   choiceAt(x: number, y: number): number | null {
     for (let index = 0; index < this.choiceRows.length; index += 1) {
-      const bounds = this.choiceRows[index].getBounds();
-      if (x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY) {
+      const local = this.choiceRows[index].toLocal({ x, y }, this.root.parent ?? this.root);
+      const plate = this.choiceRows[index].getChildAt(0);
+      if (local.x >= 0 && local.x <= plate.width && local.y >= 0 && local.y <= plate.height) {
         return index;
       }
     }
@@ -255,7 +258,8 @@ function createChoice(label: string, index: number): Container {
     text: label.toLocaleUpperCase('en-US'),
     style: {
       fill: '#ffffff',
-      fontFamily: '"Courier New", Courier, monospace',
+      fontFamily: GAME_FONTS.cozy,
+      fontWeight: '700',
       fontSize: 18,
       letterSpacing: 0.6,
       wordWrap: true,

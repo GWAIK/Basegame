@@ -36,9 +36,9 @@
           "description": "Label shown in tools. Defaults to the scene id."
         },
         "fit": {
-          "enum": ["cover", "contain"],
+          "enum": ["width", "cover", "contain"],
           "default": "cover",
-          "description": "cover fills the screen and crops the edges. contain shows the whole image with bars around it."
+          "description": "width touches the left and right edges and crops the top and bottom. cover fills the screen and crops the overflow. contain shows the whole image with bars around it."
         },
         "look": {
           "type": "boolean",
@@ -193,6 +193,30 @@
               "type": "boolean",
               "const": true,
               "description": "Shows or hides the debug panel and the scene tools. Works in a published build."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["shop"],
+          "additionalProperties": false,
+          "properties": {
+            "shop": {
+              "type": "boolean",
+              "const": true,
+              "description": "Opens the shop on the menu, where decor and maps can be bought."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["focus"],
+          "additionalProperties": false,
+          "properties": {
+            "focus": {
+              "type": "boolean",
+              "const": true,
+              "description": "Black screen to pick a focus length, then a short monologue, then the first level. The length stays at one minute."
             }
           }
         },

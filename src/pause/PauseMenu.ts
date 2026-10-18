@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { CAMERA_CONFIG } from '../camera/CameraConfig';
 import { fitScene } from '../scenes/fitScene';
+import { GAME_FONTS } from '../theme/fonts';
 import { PAUSE_BOARD_HEIGHT, PAUSE_BOARD_WIDTH, PAUSE_CONFIG } from './PauseConfig';
 
 export type PauseAction = 'resume' | 'settings' | 'menu';
@@ -137,18 +138,20 @@ function drawButton(button: PauseButton, hovered: boolean): Container {
   const left = button.x - button.width / 2;
   const top = button.y - button.height / 2;
   const box = new Graphics();
+  const radius = Math.min(28, button.height / 2);
   box
-    .roundRect(left, top, button.width, button.height, 2)
-    .fill({ color: hovered ? 0x1c202a : 0x0c0e14, alpha: hovered ? 0.92 : 0.78 })
-    .stroke({ color: 0xf4f1ea, width: 2, alpha: hovered ? 0.7 : 0.28 });
+    .roundRect(left, top, button.width, button.height, radius)
+    .fill({ color: hovered ? 0x26211e : 0x171412, alpha: hovered ? 0.96 : 0.88 })
+    .stroke({ color: hovered ? 0xf3a871 : 0xf4f1ea, width: 2, alpha: hovered ? 0.85 : 0.28 });
 
   const label = new Text({
     text: button.label,
     anchor: 0.5,
     style: {
       fill: '#f4f1ea',
-      fontFamily: 'Georgia, "Times New Roman", serif',
-      fontSize: Math.max(18, Math.min(36, button.height * 0.42)),
+      fontFamily: GAME_FONTS.cozy,
+      fontWeight: '600',
+      fontSize: Math.max(18, Math.min(34, button.height * 0.42)),
     },
   });
   label.position.set(button.x, button.y);

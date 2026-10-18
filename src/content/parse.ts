@@ -42,9 +42,9 @@ const CUE_KEYS = ['file', 'volume'];
 const TRIGGER_KEYS = ['id', 'label', 'x', 'y', 'width', 'height', 'actions'];
 const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
-const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen'] as const;
+const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen', 'shop', 'focus'] as const;
 const DEFAULT_TEXT_SIZE = 32;
-const FITS: readonly SceneFit[] = ['cover', 'contain'];
+const FITS: readonly SceneFit[] = ['width', 'cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
 const DEFAULT_SHAKE_MS = 300;
 
@@ -247,6 +247,12 @@ function parseAction(raw: unknown, where: string, problems: ContentProblems): Ac
   if (kind === 'fullscreen') {
     return parseFullscreenAction(raw, where, problems);
   }
+  if (kind === 'shop') {
+    return parseShopAction(raw, where, problems);
+  }
+  if (kind === 'focus') {
+    return parseFocusAction(raw, where, problems);
+  }
   return parseShakeAction(raw, where, problems);
 }
 
@@ -302,6 +308,24 @@ function parseDevAction(raw: Json, where: string, problems: ContentProblems): Ac
     return null;
   }
   return { type: 'dev' };
+}
+
+function parseShopAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['shop'], where, problems);
+  if (raw.shop !== true) {
+    problems.add(where, '"shop" must be true');
+    return null;
+  }
+  return { type: 'shop' };
+}
+
+function parseFocusAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['focus'], where, problems);
+  if (raw.focus !== true) {
+    problems.add(where, '"focus" must be true');
+    return null;
+  }
+  return { type: 'focus' };
 }
 
 function parseQuitAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {

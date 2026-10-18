@@ -1,4 +1,4 @@
-import { Application, BlurFilter, Container, type Texture } from 'pixi.js';
+import { Application, BlurFilter, Container, Graphics, type Texture } from 'pixi.js';
 import { AssetLoader } from '../assets/AssetLoader';
 import { AudioPlayer } from '../audio/AudioPlayer';
 import { Camera } from '../camera/Camera';
@@ -11,6 +11,10 @@ import { DialogueManager } from '../dialogue/DialogueManager';
 import { isPauseKey, PAUSE_CONFIG, PAUSE_KEYS } from '../pause/PauseConfig';
 import { PauseMenu } from '../pause/PauseMenu';
 import { StageScene } from '../scenes/StageScene';
+import { FocusScreen } from '../focus/FocusScreen';
+import { ShopScreen } from '../shop/ShopScreen';
+import { Wallet } from '../shop/Wallet';
+import { LevelTimer } from '../timer/LevelTimer';
 import { EventBus } from './EventBus';
 import type { GameEvents, SceneLocation } from './GameEvents';
 import type { Scene } from './Scene';
@@ -31,9 +35,16 @@ export class Game {
 
   private readonly app = new Application();
   private readonly play = new Container({ label: 'play' });
+  private readonly screen = new Container({ label: 'screen' });
+  private readonly screenMask = new Graphics({ label: 'screen-mask' });
   private readonly world = new Container({ label: 'world' });
   private readonly ui = new Container({ label: 'ui' });
+  private readonly pauseLayer = new Container({ label: 'pause-layer' });
   private readonly pauseMenu = new PauseMenu();
+  private readonly levelTimer = new LevelTimer();
+  private readonly wallet = new Wallet();
+  private readonly shop = new ShopScreen(this.wallet);
+  private readonly focusScreen = new FocusScreen();
   private readonly blur = new BlurFilter({ strength: PAUSE_CONFIG.blur, quality: 4 });
   private readonly camera = new Camera(this.world);
   private readonly portraitCache = new Map<string, Promise<Texture | null>>();
@@ -44,9 +55,17 @@ export class Game {
   private currentLocation: SceneLocation | null = null;
   private loadToken = 0;
   private actionToken = 0;
+  private focusToken = 0;
   private paused = false;
+  private screenX = 0;
+  private screenY = 0;
+  private screenSide = 1;
   /** Game scene hidden while Settings was opened from the pause menu. */
   private returnToPause: { scene: StageScene; location: SceneLocation } | null = null;
+  /** Settings opened from pause hides the level clock without resetting it. */
+  private keepTimer = false;
+  /** The minute ran out. Fade, narrate, then leave for the menu. */
+  private sessionEnding = false;
 
   constructor(readonly content: ContentLibrary) {}
 
@@ -70,7 +89,7 @@ export class Game {
   async start(host: HTMLElement): Promise<void> {
     await this.app.init({
       resizeTo: host,
-      background: 0x0b0c10,
+      background: 0x000000,
       antialias: true,
       autoDensity: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
@@ -78,20 +97,36 @@ export class Game {
 
     this.app.canvas.style.display = 'block';
     host.appendChild(this.app.canvas);
-    this.play.addChild(this.world, this.ui);
-    this.app.stage.addChild(this.play, this.pauseMenu.root);
+    this.screen.addChild(this.world, this.levelTimer.root, this.shop.root, this.focusScreen.root);
+    this.screen.mask = this.screenMask;
+    this.play.addChild(this.screen, this.screenMask, this.ui);
+    this.pauseLayer.addChild(this.pauseMenu.root);
+    this.app.stage.addChild(this.play, this.pauseLayer);
     this.blur.repeatEdgePixels = true;
     this.pauseMenu.onSelect = (action) => this.onPauseSelect(action);
+    this.levelTimer.onComplete = () => this.onTimerComplete();
+    this.shop.onPurchase = (bought) => {
+      if (!bought) {
+        return;
+      }
+      const url = this.content.contentAssetUrl('/shared/audio/click.wav');
+      if (url) {
+        this.audio.playSound(url, 0.55);
+      }
+    };
     this.handleResize();
 
     this.app.ticker.add((ticker) => {
       if (!this.paused) {
         this.camera.update(ticker.deltaMS);
+        this.levelTimer.update(ticker.deltaMS);
+        this.focusScreen.update(ticker.deltaMS);
         this.scene?.update(ticker.deltaMS);
         this.dialogue.refresh();
         this.events.emit('update', { deltaMS: ticker.deltaMS });
       } else {
         this.blur.strength = PAUSE_CONFIG.blur;
+        this.levelTimer.refresh();
         this.pauseMenu.update();
       }
     });
@@ -112,6 +147,9 @@ export class Game {
    */
   async goTo(levelId: string, sceneId?: string): Promise<void> {
     this.actionToken += 1;
+    const previousLevelId = this.currentLocation?.levelId ?? null;
+    const keepTimer = this.keepTimer;
+    this.keepTimer = false;
     const level = this.content.level(levelId);
     if (!level) {
       console.warn(`Level "${levelId}" not found`);
@@ -131,9 +169,9 @@ export class Game {
     const token = ++this.loadToken;
     const next = new StageScene(level, definition, this.content, this.assets);
     next.setTriggerHandler((trigger) => {
-      void this.runActions(level, trigger.actions);
+      void this.runActions(level, trigger.actions, true);
     });
-    next.resize(this.app.screen.width, this.app.screen.height);
+    next.resize(this.screenSide, this.screenSide);
     await next.load();
     if (token !== this.loadToken) {
       next.destroy();
@@ -141,14 +179,22 @@ export class Game {
     }
 
     this.dialogue.close();
+    this.camera.setZoomed(false);
     if (this.scene && this.currentLocation) {
       this.events.emit('scene:exit', this.currentLocation);
       this.scene.destroy();
     }
 
     this.scene = next;
-    this.camera.setLocked(!definition.look);
+    this.camera.setLocked(level.id === 'menu');
+    if (keepTimer) {
+      this.levelTimer.setVisible(false);
+    } else if (previousLevelId !== level.id) {
+      this.levelTimer.enter(level.id);
+    }
     this.currentLocation = { levelId: level.id, sceneId: definition.id };
+    this.shop.close();
+    this.shop.setOnMenu(level.id === 'menu');
     this.app.canvas.style.cursor = '';
     this.world.addChild(next.root);
     this.events.emit('scene:enter', this.currentLocation);
@@ -241,18 +287,35 @@ export class Game {
 
   private handleResize(): void {
     const { width, height } = this.app.screen;
-    this.camera.setViewport(width, height);
-    this.dialogue.resize(width, height);
-    this.pauseMenu.resize(width, height);
-    this.scene?.resize(width, height);
-    this.events.emit('resize', { width, height });
+    const marginY = 36;
+    const side = Math.floor(Math.min(width, Math.max(1, height - marginY * 2)));
+    this.screenSide = side;
+    this.screenX = Math.floor((width - side) / 2);
+    this.screenY = Math.floor((height - side) / 2);
+    this.screen.position.set(this.screenX, this.screenY);
+    this.ui.position.set(this.screenX, this.screenY);
+    this.pauseLayer.position.set(this.screenX, this.screenY);
+    this.screenMask.clear();
+    this.screenMask.roundRect(this.screenX, this.screenY, side, side, side * 0.06).fill(0xffffff);
+
+    this.camera.setViewport(side, side);
+    this.dialogue.resize(side, side);
+    this.pauseMenu.resize(side, side);
+    this.scene?.resize(side, side);
+    this.levelTimer.resize(side);
+    this.shop.resize(side);
+    this.focusScreen.resize(side);
+    this.events.emit('resize', { width: side, height: side });
   }
 
   private bindInput(): void {
     const canvas = this.app.canvas;
-    const toCanvas = (event: PointerEvent) => {
+    const toScreen = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      return {
+        x: event.clientX - rect.left - this.screenX,
+        y: event.clientY - rect.top - this.screenY,
+      };
     };
 
     window.addEventListener('pointerdown', () => {
@@ -260,9 +323,17 @@ export class Game {
     });
 
     window.addEventListener('pointermove', (event) => {
-      const point = toCanvas(event);
+      const point = toScreen(event);
       if (this.paused) {
         canvas.style.cursor = this.pauseMenu.hover(point.x, point.y) ? 'pointer' : '';
+        return;
+      }
+      if (this.shop.isOpen) {
+        canvas.style.cursor = this.inScreen(point) && this.shop.hoverAt(point.x, point.y) ? 'pointer' : '';
+        return;
+      }
+      if (this.focusScreen.isChoosing) {
+        canvas.style.cursor = this.inScreen(point) && this.focusScreen.hoverAt(point.x, point.y) ? 'pointer' : '';
         return;
       }
       if (!this.scene?.isCapturingPointer()) {
@@ -272,13 +343,13 @@ export class Game {
         ? (this.dialogue.hover(point.x, point.y) ? 'pointer' : '')
         : this.dialogue.isActive
           ? null
-          : (this.scene?.onPointerMove(point.x, point.y) ?? null);
+          : (this.inScreen(point) ? (this.scene?.onPointerMove(point.x, point.y) ?? null) : null);
       canvas.style.cursor = cursor ?? '';
     });
 
     canvas.addEventListener('pointerdown', (event) => {
       this.audio.unlock();
-      const point = toCanvas(event);
+      const point = toScreen(event);
       if (this.paused) {
         this.pauseMenu.pointerDown(point.x, point.y);
         return;
@@ -287,29 +358,76 @@ export class Game {
         this.dialogue.advance(point.x, point.y);
         return;
       }
-      this.scene?.onPointerDown(point.x, point.y);
+      if (this.focusScreen.isOpen) {
+        if (this.focusScreen.isChoosing && this.inScreen(point)) {
+          this.focusScreen.pointerDown(point.x, point.y);
+        }
+        return;
+      }
+      if (this.shop.isOpen) {
+        if (this.inScreen(point)) {
+          this.shop.pointerDown(point.x, point.y);
+        }
+        return;
+      }
+      if (this.inScreen(point)) {
+        this.scene?.onPointerDown(point.x, point.y);
+      }
     });
 
     window.addEventListener('pointerup', (event) => {
-      if (this.paused || this.dialogue.isActive) {
+      this.audio.unlock();
+      if (this.paused || this.dialogue.isActive || this.shop.isOpen || this.focusScreen.isOpen) {
         return;
       }
-      const point = toCanvas(event);
+      const point = toScreen(event);
       this.scene?.onPointerUp(point.x, point.y);
     });
+
+    window.addEventListener('click', () => {
+      this.audio.unlock();
+    });
+
+    window.addEventListener('wheel', (event) => {
+      if (this.shop.isOpen) {
+        this.shop.wheel(event.deltaY);
+      }
+    }, { passive: true });
 
     window.addEventListener('keydown', (event) => {
       if (event.repeat || isTypingTarget(event.target)) {
         return;
       }
       this.audio.unlock();
+      if (this.focusScreen.isChoosing) {
+        if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+          event.preventDefault();
+          this.focusScreen.nudge(event.code === 'ArrowUp' ? -1 : 1);
+          return;
+        }
+        if (event.code === 'Enter' || event.code === 'Space') {
+          event.preventDefault();
+          this.focusScreen.confirm();
+          return;
+        }
+        if (event.code === 'Escape') {
+          event.preventDefault();
+          this.focusScreen.cancel();
+          return;
+        }
+      }
+      if (this.shop.isOpen && event.code === 'Escape') {
+        event.preventDefault();
+        this.shop.close();
+        return;
+      }
       if (event.code === 'Space') {
         event.preventDefault();
       }
       if (PAUSE_KEYS.listening) {
         return;
       }
-      if (isPauseKey(event.code) && (this.paused || this.isPlaying())) {
+      if (!this.sessionEnding && isPauseKey(event.code) && (this.paused || this.isPlaying())) {
         event.preventDefault();
         this.togglePause();
         return;
@@ -333,6 +451,7 @@ export class Game {
             this.dialogue.advance();
           } else if (event.code === 'Escape') {
             this.dialogue.close();
+    this.camera.setZoomed(false);
           }
         }
         return;
@@ -342,6 +461,10 @@ export class Game {
   }
 
   /** Menus are the menu level. Pause only applies once Play has opened a level. */
+  private inScreen(point: { x: number; y: number }): boolean {
+    return point.x >= 0 && point.x <= this.screenSide && point.y >= 0 && point.y <= this.screenSide;
+  }
+
   private isPlaying(): boolean {
     return this.currentLocation !== null && this.currentLocation.levelId !== 'menu';
   }
@@ -358,6 +481,7 @@ export class Game {
       return;
     }
     this.paused = paused;
+    this.audio.setPaused(paused);
     this.play.filters = paused ? [this.blur] : null;
     this.blur.strength = PAUSE_CONFIG.blur;
     this.pauseMenu.setOpen(paused);
@@ -386,6 +510,7 @@ export class Game {
 
   /** Settings stays the menu scene. Back returns to the paused scene instead of Main. */
   private async openSettingsFromPause(held: { scene: StageScene; location: SceneLocation }): Promise<void> {
+    this.keepTimer = true;
     await this.goTo('menu', 'settings');
     if (this.returnToPause) {
       held.scene.destroy();
@@ -416,6 +541,7 @@ export class Game {
 
     this.actionToken += 1;
     this.dialogue.close();
+    this.camera.setZoomed(false);
     if (this.scene && this.currentLocation) {
       this.events.emit('scene:exit', this.currentLocation);
       this.scene.destroy();
@@ -423,7 +549,8 @@ export class Game {
 
     this.scene = held.scene;
     this.currentLocation = held.location;
-    this.camera.setLocked(!held.scene.definition.look);
+    this.camera.setLocked(false);
+    this.levelTimer.setVisible(true);
     this.world.addChild(held.scene.root);
     this.events.emit('scene:enter', held.location);
     this.refreshFullscreenLabel();
@@ -432,7 +559,7 @@ export class Game {
   }
 
   /** Runs steps in order. A newer list, or a scene change, abandons this one. */
-  private async runActions(level: LevelDef, actions: readonly ActionDef[]): Promise<void> {
+  private async runActions(level: LevelDef, actions: readonly ActionDef[], fromTrigger = false): Promise<void> {
     const token = ++this.actionToken;
     for (const action of actions) {
       if (token !== this.actionToken) {
@@ -444,7 +571,7 @@ export class Game {
           this.audio.playSound(url, action.volume);
         }
       } else if (action.type === 'dialogue') {
-        await this.playDialogueAndWait(action.id);
+        await this.playDialogueAndWait(action.id, fromTrigger && level.id !== 'menu');
       } else if (action.type === 'shake') {
         this.shakeCamera(action.intensity, action.durationMs);
       } else if (action.type === 'go') {
@@ -461,6 +588,10 @@ export class Game {
         await this.toggleDevTools();
       } else if (action.type === 'fullscreen') {
         await this.toggleFullscreen();
+      } else if (action.type === 'shop') {
+        this.shop.openShop();
+      } else if (action.type === 'focus') {
+        await this.runFocus();
       } else {
         window.close();
         await this.showNotice('Close this tab to leave.');
@@ -469,23 +600,100 @@ export class Game {
     }
   }
 
+  /**
+   * Black screen, one minute only, then a short monologue, then the first level.
+   * The length cannot move. That is the story.
+   */
+  private async runFocus(): Promise<void> {
+    const token = ++this.focusToken;
+    const choice = await this.focusScreen.open();
+    if (token !== this.focusToken) {
+      return;
+    }
+    if (choice !== 'ok') {
+      this.focusScreen.close();
+      return;
+    }
+    const url = this.content.contentAssetUrl('/shared/audio/click.wav');
+    if (url) {
+      this.audio.playSound(url, 0.7);
+    }
+    await this.playDialogueAndWait('focus_begin');
+    if (token !== this.focusToken) {
+      this.focusScreen.close();
+      return;
+    }
+    await this.goTo('level-1');
+    if (token !== this.focusToken) {
+      return;
+    }
+    this.focusScreen.close();
+  }
+
+  /** 00:00. The frame fades out, a narrator closes the day, then the menu returns. */
+  private onTimerComplete(): void {
+    if (this.sessionEnding || !this.isPlaying()) {
+      return;
+    }
+    void this.endSession();
+  }
+
+  private async endSession(): Promise<void> {
+    if (this.sessionEnding) {
+      return;
+    }
+    this.sessionEnding = true;
+    const token = ++this.focusToken;
+    this.actionToken += 1;
+    while (this.dialogue.isActive && token === this.focusToken) {
+      await wait(40);
+    }
+    if (token !== this.focusToken) {
+      this.sessionEnding = false;
+      return;
+    }
+    await this.focusScreen.fadeToBlack(900);
+    if (token !== this.focusToken) {
+      this.sessionEnding = false;
+      return;
+    }
+    await this.playDialogueAndWait('focus_end');
+    if (token !== this.focusToken) {
+      this.focusScreen.close();
+      this.sessionEnding = false;
+      return;
+    }
+    await this.goTo('menu');
+    if (token !== this.focusToken) {
+      return;
+    }
+    this.focusScreen.close();
+    this.sessionEnding = false;
+  }
+
   private showNotice(text: string): Promise<void> {
     return new Promise((resolve) => {
       this.dialogue.start([{ speaker: '', text }], () => resolve());
     });
   }
 
-  private async playDialogueAndWait(dialogueId: string): Promise<void> {
+  private async playDialogueAndWait(dialogueId: string, zoom = false): Promise<void> {
     const story = this.content.story;
     if (!story || !this.content.hasKnot(dialogueId)) {
       console.warn(`Dialogue "${dialogueId}" not found`);
       return;
     }
 
+    if (zoom) {
+      this.camera.setZoomed(true);
+    }
     this.events.emit('dialogue:start', { dialogueId });
     const ending = await this.dialogue.play(story, dialogueId, (effect) => {
       this.applyInkEffect(effect);
     });
+    if (zoom) {
+      this.camera.setZoomed(false);
+    }
     this.events.emit('dialogue:end', { dialogueId });
     await this.applyInkEnding(ending);
   }
@@ -508,7 +716,7 @@ export class Game {
   }
 
   private async applyInkEnding(effect: InkEffect | null): Promise<void> {
-    if (!effect) {
+    if (!effect || this.sessionEnding) {
       return;
     }
     if (effect.type === 'go' && this.currentLocation) {
@@ -545,6 +753,12 @@ function enterActions(scene: SceneDef): readonly ActionDef[] {
     return scene.onEnter;
   }
   return [{ type: 'dialogue', id: scene.dialogue }, ...scene.onEnter];
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function choiceNumber(code: string): number | null {

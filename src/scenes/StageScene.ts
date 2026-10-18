@@ -8,6 +8,7 @@ import { Scene } from '../core/Scene';
 import { devTools } from '../debug/devTools';
 import { SceneHandles } from '../editor/SceneHandles';
 import { Triggers } from '../triggers/Triggers';
+import { GAME_FONTS } from '../theme/fonts';
 import { fitScene } from './fitScene';
 
 const PLACEHOLDER_WIDTH = 1920;
@@ -146,7 +147,7 @@ export class StageScene extends Scene {
 
   private addBackground(image: LoadedImage | null): void {
     if (!image) {
-      this.backgroundLayer.addChild(createBackgroundPlaceholder());
+      this.backgroundLayer.addChild(createBackgroundPlaceholder(this.level.id === 'menu'));
       return;
     }
 
@@ -159,10 +160,11 @@ export class StageScene extends Scene {
     if (this.definition.texts.length === 0) {
       return;
     }
+    const isMenu = this.level.id === 'menu';
     const layer = new Container();
     layer.label = 'texts';
     for (const item of this.definition.texts) {
-      const text = createSceneText(item);
+      const text = createSceneText(item, isMenu);
       this.textViews.push(text);
       layer.addChild(text);
     }
@@ -194,22 +196,43 @@ export class StageScene extends Scene {
   }
 }
 
-function createBackgroundPlaceholder(): Graphics {
-  const placeholder = new Graphics();
-  placeholder.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(0x10131a);
-  return placeholder;
+function createBackgroundPlaceholder(isMenu: boolean): Container {
+  const root = new Container();
+  const base = new Graphics();
+  base.rect(0, 0, PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT).fill(isMenu ? 0xf6efe6 : 0x10131a);
+  root.addChild(base);
+
+  if (isMenu) {
+    const glow = new Graphics();
+    glow.circle(960, 480, 460).fill({ color: 0xefe2d1, alpha: 0.75 });
+    glow.circle(960, 465, 310).fill({ color: 0xfbf7f2, alpha: 0.65 });
+
+    const shadow = new Graphics();
+    shadow.roundRect(960 - 380, 178, 760, 740, 48).fill({ color: 0xd8c3ad, alpha: 0.32 });
+
+    const card = new Graphics();
+    card
+      .roundRect(960 - 380, 170, 760, 740, 48)
+      .fill({ color: 0xfffbf7, alpha: 0.98 })
+      .stroke({ color: 0xe6d6c5, width: 2.5, alpha: 0.95 });
+
+    root.addChild(glow, shadow, card);
+  }
+  return root;
 }
 
-function createSceneText(item: TextDef): Text {
+function createSceneText(item: TextDef, isMenu: boolean): Text {
+  const isTimer = /^\d{2}:\d{2}$/.test(item.text.trim());
   const text = new Text({
     text: item.text,
     anchor: 0.5,
     style: {
-      fill: '#f4f1ea',
-      fontFamily: 'Georgia, "Times New Roman", serif',
+      fill: isMenu ? (isTimer ? '#3d2e26' : '#4a372d') : '#f4ebe1',
+      fontFamily: isTimer ? GAME_FONTS.mono : item.size >= 40 ? GAME_FONTS.display : GAME_FONTS.cozy,
+      fontWeight: isTimer || item.size >= 40 ? '700' : '600',
       fontSize: item.size,
       align: 'center',
-      letterSpacing: item.size >= 48 ? 6 : 0.4,
+      letterSpacing: isTimer ? 4 : item.size >= 40 ? 0.6 : 0.4,
     },
   });
   text.position.set(item.x, item.y);

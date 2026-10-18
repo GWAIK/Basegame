@@ -6,30 +6,43 @@
     "main": {
       "name": "Main",
       "fit": "cover",
-      "look": false,
+      "look": true,
       "texts": [
-        { "text": "CACOPHOBIA", "x": 960, "y": 320, "size": 72 }
+        { "text": "Focus Together with Iris", "x": 960, "y": 248, "size": 44 },
+        { "text": "01:00", "x": 960, "y": 465, "size": 88 }
       ],
       "triggers": [
         {
           "id": "play",
-          "label": "Play",
+          "label": "Start Focus",
           "x": 960,
-          "y": 560,
-          "width": 460,
-          "height": 72,
+          "y": 700,
+          "width": 310,
+          "height": 74,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
-            { "level": "level-1" }
+            { "focus": true }
+          ]
+        },
+        {
+          "id": "shop",
+          "label": "Shop",
+          "x": 856,
+          "y": 816,
+          "width": 68,
+          "height": 68,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.7 },
+            { "shop": true }
           ]
         },
         {
           "id": "settings",
           "label": "Settings",
           "x": 960,
-          "y": 660,
-          "width": 460,
-          "height": 72,
+          "y": 816,
+          "width": 68,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "go": "settings" }
@@ -38,10 +51,10 @@
         {
           "id": "quit",
           "label": "Quit",
-          "x": 960,
-          "y": 760,
-          "width": 460,
-          "height": 72,
+          "x": 1064,
+          "y": 816,
+          "width": 68,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "quit": true }
@@ -52,45 +65,45 @@
     "settings": {
       "name": "Settings",
       "fit": "cover",
-      "look": false,
+      "look": true,
       "texts": [
-        { "text": "Settings", "x": 960, "y": 300, "size": 56 }
+        { "text": "Settings", "x": 960, "y": 270, "size": 48 }
       ],
       "triggers": [
         {
           "id": "fullscreen",
           "label": "Fullscreen: Off",
           "x": 960,
-          "y": 500,
-          "width": 460,
-          "height": 72,
+          "y": 450,
+          "width": 380,
+          "height": 68,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "fullscreen": true }
           ]
         },
         {
+          "id": "dev",
+          "label": "Dev mode",
+          "x": 960,
+          "y": 546,
+          "width": 380,
+          "height": 68,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
+            { "dev": true }
+          ]
+        },
+        {
           "id": "back",
           "label": "Back",
           "x": 960,
-          "y": 620,
-          "width": 460,
+          "y": 720,
+          "width": 72,
           "height": 72,
           "actions": [
             { "sound": "/shared/audio/click.wav", "volume": 0.7 },
             { "go": "main" }
-          ]
-        },
-        {
-          "id": "dev",
-          "label": "Dev mode",
-          "x": 960,
-          "y": 760,
-          "width": 240,
-          "height": 48,
-          "actions": [
-            { "sound": "/shared/audio/click.wav", "volume": 0.5 },
-            { "dev": true }
           ]
         }
       ]

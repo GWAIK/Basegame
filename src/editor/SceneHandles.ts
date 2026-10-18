@@ -498,10 +498,11 @@ export class SceneHandles {
   }
 
   private toLocal(screenX: number, screenY: number): { x: number; y: number } | null {
-    if (!this.host.root.parent) {
+    const world = this.host.root.parent;
+    if (!world) {
       return null;
     }
-    return this.host.root.toLocal({ x: screenX, y: screenY });
+    return this.host.root.toLocal({ x: screenX, y: screenY }, world.parent ?? undefined);
   }
 }
 

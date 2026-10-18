@@ -6,7 +6,7 @@
   "scenes": {
     "roof": {
       "name": "Roof",
-      "fit": "cover",
+      "fit": "width",
       "background": "/shared/backgrounds/BG1_test.webp",
       "dialogue": "level2_roof",
       "onEnter": [

@@ -1,3 +1,20 @@
+=== focus_begin ===
+User: One minute.
+User: It won't take less, and it won't take more.
+User: Alright. Open it.
+-> END
+
+=== focus_end ===
+That's enough for today.
+-> END
+
+=== level1_study ===
+User: Iris. You haven't looked up in an hour.
+Iris: Hold on. If I stop now I'll lose the line.
+User: You said that an hour ago.
+Iris: Just give me one more minute.
+-> END
+
 === level1_stairwell ===
 Well well well The stairwell smells like wet concrete. The phone is already warm.
 User: Don't say her name out loud. # sound: audio/phone/open

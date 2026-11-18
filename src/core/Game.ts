@@ -932,7 +932,7 @@ export class Game {
     if (this.scene instanceof StageScene) {
       this.scene.consumeTrigger('trigger-1');
       this.scene.consumeTrigger('trigger-2');
-      void this.scene.replaceBackground('day-study-look.png');
+      void this.scene.replaceBackground('day-study-look.webp');
     }
     void this.playDialogueAndWait('level1_caught').then(() => {
       this.kickOutOfStudy();

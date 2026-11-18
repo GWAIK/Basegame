@@ -8,7 +8,7 @@
       "name": "Study",
       "fit": "width",
       "look": true,
-      "background": "day-study.webp"
+      "background": "/shared/backgrounds/day-study.webp"
     }
   }
 }

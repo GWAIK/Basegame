@@ -173,6 +173,8 @@ export function exportStory(story: Story): InkFile[] {
   const storyLines = [
     ...exportVars(story.facts),
     ...levels.map((level) => `INCLUDE levels/${levelSlug(level)}.ink`),
+    // Hand-written knots the game calls directly (focus_begin, focus_end). Never written by the builder.
+    "INCLUDE session.ink",
   ];
   const files: InkFile[] = [{ path: "story.ink", contents: `${storyLines.join("\n")}\n` }];
   for (const level of levels) {

@@ -132,6 +132,7 @@ The game opens `content/levels/menu` when that folder exists. It is a normal lev
 | `{ "dev": true }` | Shows or hides the debug panel and the scene tools |
 | `{ "fullscreen": true }` | Fills the screen, or returns to the window. The button label follows |
 | `{ "shake": true }` | Shakes the camera. An object can set `intensity` and `duration` |
+| `{ "lock": "door" }` | Opens that combination lock of the level, then stops the list. A solved lock does nothing |
 
 A trigger's `x` and `y` are its center, in pixels of the background, same as a character. `width` and `height` are the clickable size. A `label` draws that word as a button. Without a label the box is invisible. The pointer changes over it.
 
@@ -140,6 +141,46 @@ The boxes are drawn by one component, `Triggers`. A scene parents it and sets wh
 With dev mode on, Triggers → Show boxes draws every box. Click one to select it: drag the box to move it, drag a white handle to resize it. Values shows `id`, `x`, `y`, `width`, and `height`. Copy values puts that line on the clipboard so it can replace the trigger in `level.json`. While the boxes are shown, a click edits instead of running the action. Dev mode is on during local development. In a published build, Settings → Dev mode turns it on.
 
 The browser stays silent until the first click or key press. The ambience and any sound requested before that start on that gesture. The debug panel has a Master slider for the whole mix.
+
+### Combination locks
+
+A lock is a panel of wheels the player turns with clicks until they match a code. Declare it under `locks` in `level.json`, then open it from a trigger:
+
+```json
+"locks": {
+  "door": {
+    "title": "Door lock",
+    "values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    "combination": [2, 4, 0, 7],
+    "panel": "/shared/ui/lock-panel.webp",
+    "sounds": {
+      "change": { "file": "/shared/audio/lock-tick.wav", "volume": 0.7 },
+      "solve": { "file": "/shared/audio/lock-unlock.wav", "volume": 0.9 }
+    },
+    "onSolved": [{ "go": "open" }]
+  }
+}
+```
+
+```json
+{ "id": "door-lock", "once": false, "x": 990, "y": 830, "width": 170, "height": 260, "actions": [{ "lock": "door" }] }
+```
+
+| Field | Effect |
+| --- | --- |
+| `values` | What every wheel cycles through, in order. Text or numbers |
+| `combination` | One value per wheel. Its length is the number of wheels, up to 6 |
+| `start` | Values shown the first time. Defaults to the first value on every wheel |
+| `title` | Line at the top of the panel |
+| `panel` | Backdrop image. Without it, a plain plate is drawn |
+| `sounds` | `change`, `solve`, `open`, `close`. One left out uses the default in `src/lock/LockConfig.ts`. `null` keeps it silent |
+| `onSolved` | Actions run once the solved panel has closed |
+
+Each arrow turns its wheel one step, and a click on a wheel turns it forward. The close button leaves at any time, and the wheels stay where they were for the next visit. Once the code matches, the panel shows Unlocked, closes, and that lock never opens again: triggers that open it disappear. The opening trigger needs `"once": false`, or it would vanish the first time the player leaves.
+
+Code can listen too: `game.events.on('lock:solved', ({ levelId, lockId }) => …)`. `lock:open` and `lock:close` exist as well. Solved locks and wheel positions last until the page reloads, like the rest of the progression.
+
+`content/levels/level-sandbox-lock` is a test bench for this. In development, `http://localhost:5173/?level=level-sandbox-lock` opens it directly. The scene tools have Reset locks under Locks.
 
 ### Place a character
 
@@ -217,6 +258,7 @@ src/
   content/types.ts             level, scene, and action types
   audio/AudioPlayer.ts         looping ambience and overlapping effects
   triggers/Triggers.ts         click boxes, debug gizmos
+  lock/                        combination lock panel, its rules, and the state kept between visits
   scenes/StageScene.ts         draws a scene from level.json
   scenes/fitScene.ts           cover and contain scaling
   assets/AssetLoader.ts        images and animated WebP

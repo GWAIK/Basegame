@@ -1,6 +1,6 @@
 import { Compiler, CompilerOptions, type Story } from 'inkjs/compiler/Compiler';
 import { ContentProblems, parseLevel } from './parse';
-import type { ActionDef, LevelDef, SceneDef } from './types';
+import type { ActionDef, LevelDef, LevelLockDef, SceneDef } from './types';
 
 /*
  * Everything under content/ is found at build time.
@@ -96,6 +96,10 @@ export class ContentLibrary {
     return level.scenes.find((scene) => scene.id === sceneId) ?? null;
   }
 
+  lock(level: LevelDef, lockId: string): LevelLockDef | null {
+    return level.locks.find((lock) => lock.id === lockId) ?? null;
+  }
+
   hasKnot(knot: string): boolean {
     return this.knots.includes(knot);
   }
@@ -168,6 +172,9 @@ export class ContentLibrary {
       if (level.ambience) {
         this.checkAsset(level.id, level.ambience.file, `${file} → ambience.file`, problems);
       }
+      for (const lock of level.locks) {
+        this.checkLock(level, lock, `${file} → locks.${lock.id}`, problems);
+      }
       for (const scene of level.scenes) {
         const where = `${file} → scenes.${scene.id}`;
         if (scene.background) {
@@ -186,6 +193,12 @@ export class ContentLibrary {
           this.checkAction(level, action, `${where}.onEnter[${index}]`, problems);
         });
         scene.triggers.forEach((trigger, triggerIndex) => {
+          if (trigger.once && trigger.actions.some((action) => action.type === 'lock')) {
+            problems.add(
+              `${where}.triggers[${triggerIndex}]`,
+              'opens a lock but disappears after one click. Set "once": false so the player can come back. A solved lock hides it by itself',
+            );
+          }
           trigger.actions.forEach((action, actionIndex) => {
             this.checkAction(
               level,
@@ -199,7 +212,25 @@ export class ContentLibrary {
     }
   }
 
+  private checkLock(level: LevelDef, lock: LevelLockDef, where: string, problems: ContentProblems): void {
+    if (lock.panel) {
+      this.checkAsset(level.id, lock.panel, `${where}.panel`, problems);
+    }
+    for (const [moment, cue] of Object.entries(lock.sounds)) {
+      if (cue) {
+        this.checkAsset(level.id, cue.file, `${where}.sounds.${moment}`, problems);
+      }
+    }
+    lock.onSolved.forEach((action, index) => {
+      this.checkAction(level, action, `${where}.onSolved[${index}]`, problems);
+    });
+  }
+
   private checkAction(level: LevelDef, action: ActionDef, where: string, problems: ContentProblems): void {
+    if (action.type === 'lock' && !level.locks.some((lock) => lock.id === action.lockId)) {
+      problems.add(where, `lock "${action.lockId}" is not one of this level's "locks"`);
+      return;
+    }
     if (action.type === 'sound') {
       this.checkAsset(level.id, action.file, `${where}.sound`, problems);
       return;

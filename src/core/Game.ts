@@ -3,11 +3,13 @@ import { AssetLoader } from '../assets/AssetLoader';
 import { AudioPlayer } from '../audio/AudioPlayer';
 import { Camera } from '../camera/Camera';
 import type { ContentLibrary } from '../content/ContentLibrary';
-import type { ActionDef, LevelDef, SceneDef, TriggerDef } from '../content/types';
+import type { ActionDef, LevelDef, LevelLockDef, SceneDef, TriggerDef } from '../content/types';
 import { devTools, setDevToolsEnabled } from '../debug/devTools';
 import type { InkEffect } from '../dialogue/inkTags';
 import { DialogueBox } from '../dialogue/DialogueBox';
 import { DialogueManager } from '../dialogue/DialogueManager';
+import { LockScreen, type LockCloseReason } from '../lock/LockScreen';
+import { LockStore } from '../lock/LockStore';
 import { isPauseKey, PAUSE_CONFIG, PAUSE_KEYS } from '../pause/PauseConfig';
 import { PauseMenu } from '../pause/PauseMenu';
 import { StageScene } from '../scenes/StageScene';
@@ -57,6 +59,11 @@ export class Game {
   private readonly shop = new ShopScreen(this.wallet);
   private readonly focusScreen = new FocusScreen();
   private readonly popup = new Popup();
+  /** Wheels and solved flags of every lock, for this launch. */
+  private readonly lockStore = new LockStore();
+  private readonly lockScreen = new LockScreen(this.lockStore);
+  /** The lock whose panel is up, so its close can run that level's onSolved. */
+  private openLock: { level: LevelDef; lock: LevelLockDef } | null = null;
   private loading: LoadingScreen | null = new LoadingScreen();
   private readonly blur = new BlurFilter({ strength: PAUSE_CONFIG.blur, quality: 4 });
   private readonly camera = new Camera(this.world);
@@ -128,6 +135,7 @@ export class Game {
       this.lookTransition.root,
       this.levelTimer.root,
       this.shop.root,
+      this.lockScreen.root,
       this.focusScreen.root,
       this.popup.root,
     );
@@ -142,6 +150,8 @@ export class Game {
     this.blur.repeatEdgePixels = true;
     this.pauseMenu.onSelect = (action) => this.onPauseSelect(action);
     this.levelTimer.onComplete = () => this.onTimerComplete();
+    this.lockScreen.onSolved = () => this.onLockSolved();
+    this.lockScreen.onClose = (_key, reason) => this.onLockClose(reason);
     this.levelTimer.onChange = (remaining, previous) => this.onLevelTimerChange(remaining, previous);
     this.popup.onDismiss = () => {
       const url = this.content.contentAssetUrl('/shared/audio/click.wav');
@@ -178,6 +188,7 @@ export class Game {
         this.sideArrows.update(ticker.deltaMS);
         this.lookTransition.update(ticker.deltaMS);
         this.focusScreen.update(ticker.deltaMS);
+        this.lockScreen.update(ticker.deltaMS);
         this.scene?.update(ticker.deltaMS);
         this.tickLevel3LookWait(ticker.deltaMS);
         this.dialogue.refresh();
@@ -194,10 +205,19 @@ export class Game {
     this.bindInput();
     await this.preloadAssets();
 
-    const level = this.content.level('menu') ?? this.content.firstLevel;
+    const level = this.requestedLevel() ?? this.content.level('menu') ?? this.content.firstLevel;
     if (level) {
       await this.goTo(level.id);
     }
+  }
+
+  /** In development, ?level=level-sandbox-lock opens that level instead of the menu. */
+  private requestedLevel(): LevelDef | null {
+    if (!import.meta.env.DEV) {
+      return null;
+    }
+    const id = new URLSearchParams(window.location.search).get('level');
+    return id ? this.content.level(id) : null;
   }
 
   /**
@@ -228,7 +248,10 @@ export class Game {
 
     const token = ++this.loadToken;
     const next = new StageScene(level, definition, this.content, this.assets, this.progression.shopUnlocked);
-    next.setSpentTriggers(this.spentIds(level.id, definition.id));
+    next.setSpentTriggers(new Set([
+      ...this.spentIds(level.id, definition.id),
+      ...this.solvedLockTriggers(level, definition),
+    ]));
     next.setTriggerHandler((trigger) => {
       if (trigger.once) {
         this.spentTriggers.add(this.triggerKey(level.id, definition.id, trigger.id));
@@ -244,6 +267,7 @@ export class Game {
     }
 
     this.dialogue.close();
+    this.lockScreen.close();
     this.lookTransition.cancel();
     this.camera.setZoomed(false);
     if (this.scene && this.currentLocation) {
@@ -409,6 +433,15 @@ export class Game {
     this.camera.reset();
   }
 
+  /** Dev tool. Every lock forgets its wheels and opens again. */
+  resetLocks(): void {
+    this.lockScreen.close();
+    this.lockStore.reset();
+    if (this.currentLocation) {
+      void this.goTo(this.currentLocation.levelId, this.currentLocation.sceneId);
+    }
+  }
+
   /** Decodes every image and sound before the menu appears. */
   private async preloadAssets(): Promise<void> {
     const files = this.content.preloadFiles();
@@ -460,6 +493,7 @@ export class Game {
     this.sideArrows.resize(side);
     this.lookTransition.resize(side);
     this.shop.resize(side);
+    this.lockScreen.resize(side);
     this.focusScreen.resize(side);
     this.popup.resize(side);
     this.loading?.resize(side);
@@ -521,6 +555,10 @@ export class Game {
         canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.shop.hoverAt(point.x, point.y) ? 'pointer' : '');
         return;
       }
+      if (this.lockScreen.isOpen && !this.dialogue.isActive) {
+        canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.lockScreen.hoverAt(point.x, point.y) ? 'pointer' : '');
+        return;
+      }
       if (this.focusScreen.isChoosing) {
         canvas.style.cursor = this.gameCursor(this.inScreen(point) && this.focusScreen.hoverAt(point.x, point.y) ? 'pointer' : '');
         return;
@@ -567,6 +605,12 @@ export class Game {
         }
         return;
       }
+      if (this.lockScreen.isOpen) {
+        if (this.inScreen(point)) {
+          this.lockScreen.pointerDown(point.x, point.y);
+        }
+        return;
+      }
       const arrow = this.sideArrows.hitAt(point.x, point.y);
       if (arrow) {
         void this.onSideArrow(arrow);
@@ -579,7 +623,14 @@ export class Game {
 
     window.addEventListener('pointerup', (event) => {
       this.audio.unlock();
-      if (this.paused || this.dialogue.isActive || this.popup.isOpen || this.shop.isOpen || this.focusScreen.isOpen) {
+      if (
+        this.paused
+        || this.dialogue.isActive
+        || this.popup.isOpen
+        || this.shop.isOpen
+        || this.focusScreen.isOpen
+        || this.lockScreen.isOpen
+      ) {
         return;
       }
       const point = toScreen(event);
@@ -668,6 +719,9 @@ export class Game {
     this.camera.setZoomed(false);
           }
         }
+        return;
+      }
+      if (this.lockScreen.isOpen) {
         return;
       }
       this.scene?.onKeyDown(event.code);
@@ -807,12 +861,81 @@ export class Game {
         this.shop.openShop();
       } else if (action.type === 'focus') {
         await this.runFocus();
+      } else if (action.type === 'lock') {
+        this.openLockPanel(level, action.lockId);
+        return;
       } else {
         window.close();
         await this.showNotice('Close this tab to leave.');
         return;
       }
     }
+  }
+
+  /** Opens a combination lock of this level. A solved lock stays shut for good. */
+  private openLockPanel(level: LevelDef, lockId: string): void {
+    const lock = this.content.lock(level, lockId);
+    if (!lock) {
+      console.warn(`Lock "${lockId}" not found in level "${level.id}"`);
+      return;
+    }
+    const opened = this.lockScreen.open({
+      key: lockKey(level.id, lock.id),
+      def: lock,
+      playSound: (cue) => {
+        const url = this.content.assetUrl(level.id, cue.file);
+        if (url) {
+          this.audio.playSound(url, cue.volume);
+        }
+      },
+      loadImage: async (path) => {
+        const url = this.content.assetUrl(level.id, path);
+        const image = url ? await this.assets.loadImage(url, { trim: false }) : null;
+        return image?.texture ?? null;
+      },
+    });
+    if (!opened) {
+      return;
+    }
+    this.openLock = { level, lock };
+    this.camera.setPointer(this.screenSide / 2, this.screenSide / 2);
+    this.events.emit('lock:open', { levelId: level.id, lockId: lock.id });
+  }
+
+  /** The panel closed on a solved lock. Its triggers go away before anyone else hears of it. */
+  private onLockSolved(): void {
+    const open = this.openLock;
+    if (!open) {
+      return;
+    }
+    if (this.scene instanceof StageScene && this.scene.level.id === open.level.id) {
+      for (const id of this.solvedLockTriggers(open.level, this.scene.definition)) {
+        this.scene.consumeTrigger(id);
+      }
+    }
+    this.events.emit('lock:solved', { levelId: open.level.id, lockId: open.lock.id });
+  }
+
+  /** onSolved only runs when the player saw the lock open, not when a scene change cut it short. */
+  private onLockClose(reason: LockCloseReason): void {
+    const open = this.openLock;
+    this.openLock = null;
+    if (!open) {
+      return;
+    }
+    const solved = this.lockStore.isSolved(lockKey(open.level.id, open.lock.id));
+    this.events.emit('lock:close', { levelId: open.level.id, lockId: open.lock.id, solved });
+    if (reason === 'solved' && open.lock.onSolved.length > 0) {
+      void this.runActions(open.level, open.lock.onSolved);
+    }
+  }
+
+  /** Triggers that open a lock already solved. They are hidden like spent ones. */
+  private solvedLockTriggers(level: LevelDef, scene: SceneDef): string[] {
+    return scene.triggers
+      .filter((trigger) => trigger.actions.some((action) =>
+        action.type === 'lock' && this.lockStore.isSolved(lockKey(level.id, action.lockId))))
+      .map((trigger) => trigger.id);
   }
 
   /**
@@ -1152,6 +1275,11 @@ function loadCursorImage(url: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error(`Could not load cursor ${url}`));
     image.src = url;
   });
+}
+
+/** One name per lock across the whole game, as the LockStore keeps it. */
+function lockKey(levelId: string, lockId: string): string {
+  return `${levelId}/${lockId}`;
 }
 
 /** The dialogue field is the first step, then anything listed in onEnter. */

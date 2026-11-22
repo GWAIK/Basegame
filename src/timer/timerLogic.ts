@@ -41,6 +41,8 @@ const racingCenter: TimerLogic = {
  */
 const LEVEL_TIMERS: Record<string, TimerLogic | null> = {
   menu: null,
+  /** Test bench for the lock puzzle. No clock, so the minute never ends the session there. */
+  'level-sandbox-lock': null,
   'level-2': racingCenter,
 };
 

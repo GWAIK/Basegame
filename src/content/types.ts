@@ -1,3 +1,5 @@
+import type { LockDef } from '../lock/types';
+
 /**
  * width stretches the image to the left and right edges and crops the top and bottom.
  * height stretches it to the top and bottom edges and crops the sides.
@@ -27,6 +29,7 @@ export interface AudioCue {
  * fullscreen switches between the window and the whole screen.
  * shop opens the menu shop.
  * focus opens the black minute screen, then a short monologue, then the level.
+ * lock opens that combination lock of the level, then ends the list. A solved lock does nothing.
  */
 export type ActionDef =
   | { type: 'sound'; file: string; volume: number }
@@ -38,7 +41,8 @@ export type ActionDef =
   | { type: 'dev' }
   | { type: 'fullscreen' }
   | { type: 'shop' }
-  | { type: 'focus' };
+  | { type: 'focus' }
+  | { type: 'lock'; lockId: string };
 
 /**
  * A click box. x and y are its center, in pixels of the background.
@@ -83,6 +87,11 @@ export interface SceneDef {
   look: boolean;
 }
 
+/** A lock placed in a level. onSolved runs once the solved panel has closed. */
+export interface LevelLockDef extends LockDef {
+  onSolved: readonly ActionDef[];
+}
+
 export interface LevelDef {
   /** The level folder name. */
   id: string;
@@ -91,5 +100,7 @@ export interface LevelDef {
   /** Looping bed for every scene that does not set its own. */
   ambience: AudioCue | null;
   scenes: readonly SceneDef[];
+  /** Combination locks a trigger can open with { "lock": "id" }. */
+  locks: readonly LevelLockDef[];
 }
 

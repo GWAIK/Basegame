@@ -1,3 +1,5 @@
+import { LOCK_CONFIG, LOCK_DEFAULT_SOUNDS } from '../lock/LockConfig';
+import type { LockSounds } from '../lock/types';
 import type {
   ActionDef,
   AudioCue,
@@ -5,6 +7,7 @@ import type {
   TextDef,
   TriggerDef,
   LevelDef,
+  LevelLockDef,
   SceneDef,
   SceneFit,
 } from './types';
@@ -24,7 +27,7 @@ export class ContentProblems {
 
 type Json = Record<string, unknown>;
 
-const LEVEL_KEYS = ['$schema', 'name', 'startScene', 'scenes', 'ambience'];
+const LEVEL_KEYS = ['$schema', 'name', 'startScene', 'scenes', 'ambience', 'locks'];
 const SCENE_KEYS = [
   'name',
   'fit',
@@ -42,7 +45,21 @@ const CUE_KEYS = ['file', 'volume'];
 const TRIGGER_KEYS = ['id', 'label', 'once', 'x', 'y', 'width', 'height', 'actions'];
 const TEXT_KEYS = ['text', 'x', 'y', 'size'];
 const SHAKE_KEYS = ['intensity', 'duration'];
-const ACTION_KINDS = ['sound', 'dialogue', 'go', 'level', 'shake', 'quit', 'dev', 'fullscreen', 'shop', 'focus'] as const;
+const LOCK_KEYS = ['title', 'values', 'combination', 'start', 'panel', 'sounds', 'onSolved'];
+const LOCK_SOUND_KEYS = ['change', 'solve', 'open', 'close'] as const;
+const ACTION_KINDS = [
+  'sound',
+  'dialogue',
+  'go',
+  'level',
+  'shake',
+  'quit',
+  'dev',
+  'fullscreen',
+  'shop',
+  'focus',
+  'lock',
+] as const;
 const DEFAULT_TEXT_SIZE = 32;
 const FITS: readonly SceneFit[] = ['width', 'height', 'cover', 'contain'];
 const DEFAULT_SHAKE_INTENSITY = 10;
@@ -89,6 +106,7 @@ export function parseLevel(
     startScene,
     ambience: parseCue(raw.ambience, `${file} → ambience`, problems),
     scenes,
+    locks: parseLocks(raw.locks, `${file} → locks`, problems),
   };
 }
 
@@ -253,6 +271,9 @@ function parseAction(raw: unknown, where: string, problems: ContentProblems): Ac
   if (kind === 'focus') {
     return parseFocusAction(raw, where, problems);
   }
+  if (kind === 'lock') {
+    return parseLockAction(raw, where, problems);
+  }
   return parseShakeAction(raw, where, problems);
 }
 
@@ -328,6 +349,15 @@ function parseFocusAction(raw: Json, where: string, problems: ContentProblems): 
   return { type: 'focus' };
 }
 
+function parseLockAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
+  checkKeys(raw, ['lock'], where, problems);
+  const lockId = optionalString(raw, 'lock', where, problems);
+  if (lockId === null) {
+    return null;
+  }
+  return { type: 'lock', lockId };
+}
+
 function parseQuitAction(raw: Json, where: string, problems: ContentProblems): ActionDef | null {
   checkKeys(raw, ['quit'], where, problems);
   if (raw.quit !== true) {
@@ -354,6 +384,106 @@ function parseShakeAction(raw: Json, where: string, problems: ContentProblems): 
     intensity: readNonNegative(shake, 'intensity', DEFAULT_SHAKE_INTENSITY, where, problems),
     durationMs: readNonNegative(shake, 'duration', DEFAULT_SHAKE_MS, where, problems),
   };
+}
+
+function parseLocks(raw: unknown, where: string, problems: ContentProblems): LevelLockDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!isObject(raw)) {
+    problems.add(where, 'must be an object, with locks keyed by id');
+    return [];
+  }
+  const locks: LevelLockDef[] = [];
+  for (const [id, rawLock] of Object.entries(raw)) {
+    const lock = parseLock(id, rawLock, `${where}.${id}`, problems);
+    if (lock) {
+      locks.push(lock);
+    }
+  }
+  return locks;
+}
+
+/** A broken values or combination drops the lock. Everything else falls back to a default. */
+function parseLock(id: string, raw: unknown, where: string, problems: ContentProblems): LevelLockDef | null {
+  if (!isObject(raw)) {
+    problems.add(where, 'expected an object');
+    return null;
+  }
+  checkKeys(raw, LOCK_KEYS, where, problems);
+
+  const listed = readStringList(raw, 'values', where, problems);
+  if (listed === null) {
+    return null;
+  }
+  const values = [...new Set(listed)];
+  if (values.length < listed.length) {
+    problems.add(where, '"values" lists the same value twice. Each wheel would stop on it twice');
+  }
+  if (values.length < 2) {
+    problems.add(where, '"values" needs at least two different values');
+    return null;
+  }
+
+  const combination = readStringList(raw, 'combination', where, problems);
+  if (combination === null) {
+    return null;
+  }
+  if (combination.length === 0 || combination.length > LOCK_CONFIG.maxWheels) {
+    problems.add(where, `"combination" needs from 1 to ${LOCK_CONFIG.maxWheels} values, one per wheel`);
+    return null;
+  }
+  const missing = combination.filter((value) => !values.includes(value));
+  if (missing.length > 0) {
+    problems.add(where, `"combination" uses ${missing.map((value) => `"${value}"`).join(', ')}, which is not in "values"`);
+    return null;
+  }
+
+  let start: string[] | null = null;
+  if (raw.start !== undefined) {
+    start = readStringList(raw, 'start', where, problems);
+    if (start && (start.length !== combination.length || start.some((value) => !values.includes(value)))) {
+      problems.add(where, '"start" needs one value from "values" per wheel, like "combination"');
+      start = null;
+    }
+  }
+  const opening = start ?? combination.map(() => values[0]);
+  if (opening.every((value, wheel) => value === combination[wheel])) {
+    problems.add(where, 'the wheels start on the combination. Set "start" to other values');
+  }
+
+  return {
+    id,
+    title: optionalString(raw, 'title', where, problems) ?? 'Lock',
+    values,
+    combination,
+    start,
+    panel: optionalString(raw, 'panel', where, problems),
+    sounds: parseLockSounds(raw.sounds, `${where}.sounds`, problems),
+    onSolved: parseActions(raw.onSolved, `${where}.onSolved`, problems),
+  };
+}
+
+/** A sound left out uses LOCK_DEFAULT_SOUNDS. null keeps that moment silent. */
+function parseLockSounds(raw: unknown, where: string, problems: ContentProblems): LockSounds {
+  const sounds: LockSounds = { ...LOCK_DEFAULT_SOUNDS };
+  if (raw === undefined) {
+    return sounds;
+  }
+  if (!isObject(raw)) {
+    problems.add(where, `expected an object with ${LOCK_SOUND_KEYS.map((key) => `"${key}"`).join(', ')}`);
+    return sounds;
+  }
+  checkKeys(raw, LOCK_SOUND_KEYS, where, problems);
+  for (const key of LOCK_SOUND_KEYS) {
+    const value = raw[key];
+    if (value === null) {
+      sounds[key] = null;
+    } else if (value !== undefined) {
+      sounds[key] = parseCue(value, `${where}.${key}`, problems) ?? LOCK_DEFAULT_SOUNDS[key];
+    }
+  }
+  return sounds;
 }
 
 function parseTriggers(raw: unknown, where: string, problems: ContentProblems): TriggerDef[] {
@@ -500,6 +630,29 @@ function optionalString(raw: Json, key: string, where: string, problems: Content
     return null;
   }
   return value;
+}
+
+/** A list of non-empty strings. Numbers are read as text, so [1, 2] works like ["1", "2"]. */
+function readStringList(raw: Json, key: string, where: string, problems: ContentProblems): string[] | null {
+  const value = raw[key];
+  if (value === undefined) {
+    problems.add(where, `"${key}" is required`);
+    return null;
+  }
+  if (!Array.isArray(value)) {
+    problems.add(where, `"${key}" must be a list`);
+    return null;
+  }
+  const items: string[] = [];
+  for (const item of value) {
+    const text = typeof item === 'number' && Number.isFinite(item) ? String(item) : item;
+    if (typeof text !== 'string' || text.trim() === '') {
+      problems.add(where, `"${key}" must only hold non-empty text or numbers`);
+      return null;
+    }
+    items.push(text);
+  }
+  return items;
 }
 
 function requiredNumber(raw: Json, key: string, where: string, problems: ContentProblems): number | null {

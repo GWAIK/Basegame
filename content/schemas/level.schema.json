@@ -24,6 +24,11 @@
       "description": "Scenes keyed by id. The id is used by startScene and by other files.",
       "minProperties": 1,
       "additionalProperties": { "$ref": "#/definitions/scene" }
+    },
+    "locks": {
+      "type": "object",
+      "description": "Combination locks keyed by id. A trigger opens one with { \"lock\": \"id\" }. The wheels are kept when the player leaves. A solved lock never opens again, and the triggers that open it disappear.",
+      "additionalProperties": { "$ref": "#/definitions/lock" }
     }
   },
   "definitions": {
@@ -227,6 +232,17 @@
         },
         {
           "type": "object",
+          "required": ["lock"],
+          "additionalProperties": false,
+          "properties": {
+            "lock": {
+              "type": "string",
+              "description": "Id of a lock in this level's locks. Opens its panel, then ends the list. A solved lock does nothing."
+            }
+          }
+        },
+        {
+          "type": "object",
           "required": ["quit"],
           "additionalProperties": false,
           "properties": {
@@ -259,6 +275,56 @@
           }
         }
       ]
+    },
+    "lock": {
+      "type": "object",
+      "required": ["values", "combination"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "default": "Lock",
+          "description": "Line drawn at the top of the panel."
+        },
+        "values": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": ["string", "number"] },
+          "description": "Values every wheel cycles through, in order. Text or numbers: [0, 1, 2] or [\"A\", \"B\", \"C\"]."
+        },
+        "combination": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "type": ["string", "number"] },
+          "description": "The value each wheel must show. Its length is the number of wheels. Every value must be in values."
+        },
+        "start": {
+          "type": "array",
+          "items": { "type": ["string", "number"] },
+          "description": "Values shown the first time the panel opens, one per wheel. Defaults to the first value on every wheel."
+        },
+        "panel": {
+          "type": "string",
+          "description": "Backdrop image for the panel. Shared art uses /shared/ui/lock-panel.webp. Leave it out for a plain plate."
+        },
+        "sounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "A sound left out uses the default in src/lock/LockConfig.ts. null keeps that moment silent.",
+          "properties": {
+            "change": { "oneOf": [{ "$ref": "#/definitions/cue" }, { "type": "null" }], "description": "A wheel turned." },
+            "solve": { "oneOf": [{ "$ref": "#/definitions/cue" }, { "type": "null" }], "description": "Every wheel matches. Plays over the last change." },
+            "open": { "oneOf": [{ "$ref": "#/definitions/cue" }, { "type": "null" }], "description": "The panel opened." },
+            "close": { "oneOf": [{ "$ref": "#/definitions/cue" }, { "type": "null" }], "description": "The player left before solving it." }
+          }
+        },
+        "onSolved": {
+          "type": "array",
+          "description": "Run in order once the solved panel has closed, like a trigger's actions.",
+          "items": { "$ref": "#/definitions/action" }
+        }
+      }
     },
     "text": {
       "type": "object",

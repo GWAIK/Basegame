@@ -672,6 +672,15 @@ function renderWorld(
   const volume = rangeField('Master', 1, 0, 1, 0.01, (value) => game.setMasterVolume(value));
   fragment.append(volume);
 
+  const level = game.location ? game.content.level(game.location.levelId) : null;
+  if (level && level.locks.length > 0) {
+    fragment.append(category('Locks'));
+    const locks = document.createElement('div');
+    locks.className = 'editor-actions';
+    locks.append(actionButton('Reset locks', () => game.resetLocks()));
+    fragment.append(locks);
+  }
+
   if (game.content.knots.length > 0) {
     fragment.append(category('Dialogues'));
     const actions = document.createElement('div');

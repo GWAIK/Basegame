@@ -1,0 +1,68 @@
+{
+  "$schema": "../../schemas/level.schema.json",
+  "name": "Sandbox: lock",
+  "startScene": "door",
+  "ambience": { "file": "/shared/audio/room.wav", "volume": 0.4 },
+  "locks": {
+    "door": {
+      "title": "Door lock",
+      "values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "combination": [2, 4, 0, 7],
+      "panel": "/shared/ui/lock-panel.webp",
+      "sounds": {
+        "change": { "file": "/shared/audio/lock-tick.wav", "volume": 0.7 },
+        "solve": { "file": "/shared/audio/lock-unlock.wav", "volume": 0.9 }
+      },
+      "onSolved": [
+        { "go": "open" }
+      ]
+    }
+  },
+  "scenes": {
+    "door": {
+      "name": "Locked door",
+      "fit": "cover",
+      "background": "door-locked.webp",
+      "texts": [
+        { "text": "Sandbox: lock puzzle", "x": 800, "y": 210, "size": 44 },
+        { "text": "Click the lock on the door. The code is 2 4 0 7.", "x": 800, "y": 1420, "size": 30 }
+      ],
+      "triggers": [
+        {
+          "id": "door-lock",
+          "once": false,
+          "x": 990,
+          "y": 830,
+          "width": 170,
+          "height": 260,
+          "actions": [
+            { "lock": "door" }
+          ]
+        }
+      ]
+    },
+    "open": {
+      "name": "Open door",
+      "fit": "cover",
+      "background": "door-open.webp",
+      "texts": [
+        { "text": "Unlocked. The lock cannot be opened again.", "x": 800, "y": 210, "size": 34 }
+      ],
+      "triggers": [
+        {
+          "id": "back",
+          "once": false,
+          "label": "Back to the door",
+          "x": 800,
+          "y": 1420,
+          "width": 420,
+          "height": 80,
+          "actions": [
+            { "sound": "/shared/audio/click.wav", "volume": 0.6 },
+            { "go": "door" }
+          ]
+        }
+      ]
+    }
+  }
+}
